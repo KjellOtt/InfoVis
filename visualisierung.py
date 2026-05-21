@@ -16,7 +16,23 @@ class VisualizationApp:
         
         # Alle numerischen und geeigneten String-Spalten
         self.numeric_cols = df.select_dtypes(include=[np.number]).columns.tolist()
-        self.all_attrs = sorted(self.numeric_cols)
+
+        self.categorical_cols = [
+            col for col in [
+                "Nationality",
+                "Club Name",
+                "Preferred Foot",
+                "Best Position",
+                "Club Position",
+                "Attacking Work Rate",
+                "Defensive Work Rate",
+                "Positions Played",
+                "Contract Until"
+            ]
+            if col in df.columns
+        ]
+
+        self.all_attrs = sorted(self.numeric_cols + self.categorical_cols)
         
         # GUI-Fenster
         self.root = tk.Tk()
@@ -138,10 +154,14 @@ class VisualizationApp:
             return
         
         if len(self.selected_attrs) == 1:
-            self._plot_histogram()
+            attr = self.selected_attrs[0]
+            if attr in self.numeric_cols:
+                self._plot_histogram()
+            else:
+                self._plot_category_counts()
         else:
             self._plot_scatter()
-            
+
         self.canvas.draw()
 
     def _remove_outliers(self, series: pd.Series) -> pd.Series:
@@ -177,9 +197,38 @@ class VisualizationApp:
         ax.grid(axis='y', alpha=0.3)
         self.fig.tight_layout()
 
+    def _plot_category_counts(self):
+        """Zeigt Balkendiagramm für kategoriale Attribute."""
+        attr = self.selected_attrs[0]
+        data = self.df_filtered[attr].dropna().astype(str)
+
+        if data.empty:
+            ax = self.fig.add_subplot(111)
+            ax.text(0.5, 0.5, 'Keine Daten nach Filterung', ha='center', va='center', fontsize=12)
+            ax.axis('off')
+            return
+
+        counts = data.value_counts().head(15)
+
+        ax = self.fig.add_subplot(111)
+        counts.sort_values().plot(kind='bar', ax=ax, color='steelblue', edgecolor='black', alpha=0.8)
+        ax.set_xlabel(attr)
+        ax.set_ylabel('Häufigkeit')
+        ax.set_title(f'Verteilung: {attr} (Top {len(counts)})', fontsize=12, fontweight='bold')
+        ax.grid(axis='x', alpha=0.3)
+        self.fig.tight_layout()
+
     def _plot_scatter(self):
         """Zeigt Scatterplot für zwei Attribute."""
         attr1, attr2 = self.selected_attrs[0], self.selected_attrs[1]
+
+        if attr1 not in self.numeric_cols or attr2 not in self.numeric_cols:
+            ax = self.fig.add_subplot(111)
+            ax.text(0.5, 0.5, 'Scatterplots sind nur für numerische Attribute möglich.',
+                    ha='center', va='center', fontsize=12)
+            ax.axis('off')
+            return
+
         data = self.df_filtered[[attr1, attr2]].dropna()
 
         if not self.var_show_outliers.get():
