@@ -1,4 +1,7 @@
 Die Daten scheinen ein Ausgzug aus der Datenbank für ein Fifa-Spiel zu sein.
+Spaltennamen waren in Anführungszeichen, was problematisch für weitere Verarbeitung sein kann.
+Manche Spaltennamen hatten "ueffef" vorne
+
 
 Ausgabe von main.py: bereinigung
 --- Spalten im Datensatz ---
