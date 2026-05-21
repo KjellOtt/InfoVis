@@ -49,7 +49,16 @@ class VisualizationApp:
         club_combo = ttk.Combobox(top_frame, textvariable=self.var_club, values=club_vals, width=15, state='readonly')
         club_combo.pack(side=tk.LEFT, padx=5)
         club_combo.bind('<<ComboboxSelected>>', lambda e: self._apply_filters())
-        
+
+        self.var_show_outliers = tk.BooleanVar(value=True)
+        cb_outliers = ttk.Checkbutton(
+            top_frame,
+            text="Ausreißer anzeigen",
+            variable=self.var_show_outliers,
+            command=self._update_plot
+        )
+        cb_outliers.pack(side=tk.LEFT, padx=5)
+
         # Mittlerer Frame: Attribut-Liste und Plot
         main_frame = ttk.Frame(self.root)
         main_frame.pack(fill=tk.BOTH, expand=True, padx=5, pady=5)
@@ -134,31 +143,49 @@ class VisualizationApp:
             self._plot_scatter()
             
         self.canvas.draw()
-        
+
+    def _remove_outliers(self, series: pd.Series) -> pd.Series:
+        """Entfernt Ausreißer aus einer Series mittels Interquartile-Range."""
+        Q1 = series.quantile(0.25)
+        Q3 = series.quantile(0.75)
+        IQR = Q3 - Q1
+        lower_bound = Q1 - 1.5 * IQR
+        upper_bound = Q3 + 1.5 * IQR
+        return series[(series >= lower_bound) & (series <= upper_bound)]
+
     def _plot_histogram(self):
         """Zeigt Histogram für ein Attribut."""
         attr = self.selected_attrs[0]
         data = self.df_filtered[attr].dropna()
-        
+
+        if not self.var_show_outliers.get():
+            data = self._remove_outliers(data)
+
         if data.empty:
             ax = self.fig.add_subplot(111)
             ax.text(0.5, 0.5, 'Keine Daten nach Filterung', ha='center', va='center', fontsize=12)
             ax.axis('off')
             return
-        
+
         ax = self.fig.add_subplot(111)
         ax.hist(data, bins=30, color='steelblue', edgecolor='black', alpha=0.7)
         ax.set_xlabel(attr, fontsize=11)
         ax.set_ylabel('Häufigkeit', fontsize=11)
-        ax.set_title(f'Verteilung: {attr} (n={len(data)})', fontsize=12, fontweight='bold')
+
+        title_suffix = "" if self.var_show_outliers.get() else " (Ausreißer ausgeblendet)"
+        ax.set_title(f'Verteilung: {attr} (n={len(data)}){title_suffix}', fontsize=12, fontweight='bold')
         ax.grid(axis='y', alpha=0.3)
         self.fig.tight_layout()
-        
+
     def _plot_scatter(self):
         """Zeigt Scatterplot für zwei Attribute."""
         attr1, attr2 = self.selected_attrs[0], self.selected_attrs[1]
         data = self.df_filtered[[attr1, attr2]].dropna()
-        
+
+        if not self.var_show_outliers.get():
+            data = data.loc[self._remove_outliers(data[attr1]).index]
+            data = data.loc[self._remove_outliers(data[attr2]).index]
+
         if data.empty:
             ax = self.fig.add_subplot(111)
             ax.text(0.5, 0.5, 'Keine Daten nach Filterung', ha='center', va='center', fontsize=12)
@@ -169,7 +196,9 @@ class VisualizationApp:
         ax.scatter(data[attr1], data[attr2], alpha=0.6, s=40, color='steelblue', edgecolors='black', linewidth=0.5)
         ax.set_xlabel(attr1, fontsize=11)
         ax.set_ylabel(attr2, fontsize=11)
-        ax.set_title(f'{attr1} vs {attr2} (n={len(data)})', fontsize=12, fontweight='bold')
+
+        title_suffix = "" if self.var_show_outliers.get() else " (Ausreißer ausgeblendet)"
+        ax.set_title(f'{attr1} vs {attr2} (n={len(data)}){title_suffix}', fontsize=12, fontweight='bold')
         ax.grid(True, alpha=0.3)
         self.fig.tight_layout()
         
