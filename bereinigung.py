@@ -46,7 +46,7 @@ BOOLEAN_COLUMNS = ['On Loan']
 # Datum-Spalten
 DATE_COLUMNS = ['Joined On']
 
-# Parse-Funktionen
+# Parse-Funktionen: NaN wenn leer oder für den Datentyp unlesbar.
 def parse_currency(value):
     if pd.isna(value) or value == '-':
         return np.nan
@@ -82,7 +82,6 @@ def parse_text(value):
     if pd.isna(value):
         return ''
     return str(value).strip()
-
 
 def clean_dataframe(path, verbose=True):
     try:
@@ -156,12 +155,15 @@ def clean_dataframe(path, verbose=True):
             duplicate_count = df.duplicated(keep='first').sum()
             print(f"Doppelte Zeilen insgesamt: {duplicate_count}")
 
-            def count_parse_errors(column, parsed_series):
-                raw_series = raw_df[column]
-                valid_source = raw_series.notna() & (raw_series != '') & (raw_series != '-')
-                invalid_values = valid_source & parsed_series.isna()
+            # Vergleicht ursprüngliche Werte mit geparsten Werten. 
+            # Weil Pandas bei nicht-umwandelbaren Werten NaN setzt, wird sonst das Zählen der Fehler verfälscht.
+            def count_parse_errors(column, parsed_data):
+                raw_series = raw_df[column] # Originalspalte
+                valid_source = raw_series.notna() & (raw_series != '') & (raw_series != '-') # Datenpunkt mit Inhalt
+                invalid_values = valid_source & parsed_data.isna() # NaN nach Parsing, dass vorher nicht NaN war
                 return invalid_values.sum()
 
+            # Ruft die Funktion nach Spaltennamen auf und speichert die Fehleranzahl
             int_errors = {col: count_parse_errors(col, df[col]) for col in INTEGER_COLUMNS if col in df.columns}
             float_errors = {col: count_parse_errors(col, df[col]) for col in FLOAT_COLUMNS if col in df.columns}
             date_errors = {col: count_parse_errors(col, df[col]) for col in DATE_COLUMNS if col in df.columns}
