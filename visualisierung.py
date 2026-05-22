@@ -8,53 +8,70 @@ import numpy as np
 
 
 class VisualizationApp:
-    def __init__(app, df: pd.DataFrame):
-        # Erstellt eine Kopie des DataFrames
-        app.df = df.reset_index(drop=True)
-        app.df_filtered = app.df.copy()
-        app.selected_attributes = []
-        app.num_points = len(app.df)
+    def __init__(self, df: pd.DataFrame):
+        self.df = df.reset_index(drop=True)
+        self.df_filtered = self.df.copy()
+        self.selected_attrs = []
+        self.num_points = len(self.df)
         
-        # Filtert und sortiert numerische Spalten
-        app.numeric_columns = df.select_dtypes(include=[np.number]).columns.tolist()
-        app.all_attributes = sorted(app.numeric_columns)
+        # Alle numerischen und geeigneten String-Spalten
+        self.numeric_cols = df.select_dtypes(include=[np.number]).columns.tolist()
+
+        self.categorical_cols = [
+            col for col in [
+                'Known As', 'Full Name', 'Positions Played', 'Best Position', 
+                'Nationality', 'Image Link', 'Club Name', 'Club Position', 
+                'Preferred Foot', 'Attacking Work Rate', 'Defensive Work Rate',
+                'National Team Name', 'National Team Image Link', 'National Team Position'
+            ]
+            if col in df.columns
+        ]
+
+        self.all_attrs = sorted(self.numeric_cols + self.categorical_cols)
         
         # GUI-Fenster
-        app.root = tk.Tk()
-        app.root.title("Datenvisualisierung")
-        app.root.geometry("1400x800")
+        self.root = tk.Tk()
+        self.root.title("Datenvisualisierung")
+        self.root.geometry("1400x800")
         
-        app._build_ui()
+        self._build_ui()
         
-    def _build_ui(app):
+    def _build_ui(self):
         # Oberer Frame: Filterung
-        top_frame = ttk.Frame(app.root)
+        top_frame = ttk.Frame(self.root)
         top_frame.pack(fill=tk.X, padx=5, pady=5)
         
         ttk.Label(top_frame, text="Datenpunkte:").pack(side=tk.LEFT, padx=5)
-        app.label_count = ttk.Label(top_frame, text=f"{app.num_points}", font=("Arial", 12, "bold"))
-        app.label_count.pack(side=tk.LEFT, padx=5) # Position der Labels zueinander
+        self.label_count = ttk.Label(top_frame, text=f"{self.num_points}", font=("Arial", 12, "bold"))
+        self.label_count.pack(side=tk.LEFT, padx=5)
         
         ttk.Separator(top_frame, orient=tk.VERTICAL).pack(side=tk.LEFT, fill=tk.Y, padx=10)
         
-        # Interaktion: Nationality per Dropdown wählen
         ttk.Label(top_frame, text="Nationality:").pack(side=tk.LEFT, padx=5)
-        nat_vals = ['(alle)'] + sorted(app.df['Nationality'].dropna().unique().tolist())
-        app.var_nat = tk.StringVar(value='(alle)')
-        nat_combo = ttk.Combobox(top_frame, textvariable=app.var_nat, values=nat_vals, width=15, state='readonly') # Dropdown-Menü
+        nat_vals = ['(alle)'] + sorted(self.df['Nationality'].dropna().unique().tolist())
+        self.var_nat = tk.StringVar(value='(alle)')
+        nat_combo = ttk.Combobox(top_frame, textvariable=self.var_nat, values=nat_vals, width=15, state='readonly')
         nat_combo.pack(side=tk.LEFT, padx=5)
-        nat_combo.bind('<<ComboboxSelected>>', lambda e: app._apply_filters()) # Bei Auswahländerung wird die Filterfunktion ausgeführt
+        nat_combo.bind('<<ComboboxSelected>>', lambda e: self._apply_filters())
         
-        # Interaktion: Club per Dropdown wählen
         ttk.Label(top_frame, text="Club:").pack(side=tk.LEFT, padx=5)
-        club_vals = ['(alle)'] + sorted(app.df['Club Name'].dropna().unique().tolist())
-        app.var_club = tk.StringVar(value='(alle)')
-        club_combo = ttk.Combobox(top_frame, textvariable=app.var_club, values=club_vals, width=15, state='readonly') # Dropdown-Menü
+        club_vals = ['(alle)'] + sorted(self.df['Club Name'].dropna().unique().tolist())
+        self.var_club = tk.StringVar(value='(alle)')
+        club_combo = ttk.Combobox(top_frame, textvariable=self.var_club, values=club_vals, width=15, state='readonly')
         club_combo.pack(side=tk.LEFT, padx=5)
-        club_combo.bind('<<ComboboxSelected>>', lambda e: app._apply_filters())
-        
+        club_combo.bind('<<ComboboxSelected>>', lambda e: self._apply_filters())
+
+        self.var_show_outliers = tk.BooleanVar(value=True)
+        cb_outliers = ttk.Checkbutton(
+            top_frame,
+            text="Ausreißer anzeigen",
+            variable=self.var_show_outliers,
+            command=self._update_plot
+        )
+        cb_outliers.pack(side=tk.LEFT, padx=5)
+
         # Mittlerer Frame: Attribut-Liste und Plot
-        main_frame = ttk.Frame(app.root)
+        main_frame = ttk.Frame(self.root)
         main_frame.pack(fill=tk.BOTH, expand=True, padx=5, pady=5)
         
         # Links: Attribut-Liste
@@ -62,159 +79,210 @@ class VisualizationApp:
         left_frame.pack(side=tk.LEFT, fill=tk.Y, padx=5)
         
         ttk.Label(left_frame, text="Attribute (max 2):", font=("Arial", 10, "bold")).pack(pady=5)
-        app.listbox = tk.Listbox(left_frame, width=25, height=30, selectmode=tk.MULTIPLE)
-        app.listbox.pack(fill=tk.BOTH, expand=True)
-        for attr in app.all_attributes: # Alle numerischen Attribute in die Box einfügen
-            app.listbox.insert(tk.END, attr)
-        app.listbox.bind('<<ListboxSelect>>', app._on_attr_select) # Bei Auswahl eines Attributs wird die entsprechende Funktion aufgerufen
+        self.listbox = tk.Listbox(left_frame, width=25, height=30, selectmode=tk.MULTIPLE)
+        self.listbox.pack(fill=tk.BOTH, expand=True)
+        for attr in self.all_attrs:
+            self.listbox.insert(tk.END, attr)
+        self.listbox.bind('<<ListboxSelect>>', self._on_attr_select)
         
-        # Rechts: Plot-Bereich leer initialisieren
+        # Rechts: Plot-Bereich
         plot_frame = ttk.Frame(main_frame)
         plot_frame.pack(side=tk.RIGHT, fill=tk.BOTH, expand=True, padx=5)
         
-        app.fig = Figure(figsize=(8, 6), dpi=100)
-        app.canvas = FigureCanvasTkAgg(app.fig, master=plot_frame)
-        app.canvas.get_tk_widget().pack(fill=tk.BOTH, expand=True)
+        self.fig = Figure(figsize=(8, 6), dpi=100)
+        self.canvas = FigureCanvasTkAgg(self.fig, master=plot_frame)
+        self.canvas.get_tk_widget().pack(fill=tk.BOTH, expand=True)
         
         # Unterer Frame: Datenpunkt-Vergleich
-        bottom_frame = ttk.LabelFrame(app.root, text="Zwei Datenpunkte vergleichen")
+        bottom_frame = ttk.LabelFrame(self.root, text="Zwei Datenpunkte vergleichen")
         bottom_frame.pack(fill=tk.X, padx=5, pady=5)
         
-        ttk.Label(bottom_frame, text=f"Index 1 (0-{app.num_points-1}):").pack(side=tk.LEFT, padx=5, pady=5)
-        app.entry_index1 = ttk.Entry(bottom_frame, width=10)
-        app.entry_index1.pack(side=tk.LEFT, padx=5)
+        ttk.Label(bottom_frame, text=f"Index 1 (0-{self.num_points-1}):").pack(side=tk.LEFT, padx=5, pady=5)
+        self.entry_idx1 = ttk.Entry(bottom_frame, width=10)
+        self.entry_idx1.pack(side=tk.LEFT, padx=5)
         
-        ttk.Label(bottom_frame, text=f"Index 2 (0-{app.num_points-1}):").pack(side=tk.LEFT, padx=5, pady=5)
-        app.entry_index2 = ttk.Entry(bottom_frame, width=10)
-        app.entry_index2.pack(side=tk.LEFT, padx=5)
+        ttk.Label(bottom_frame, text=f"Index 2 (0-{self.num_points-1}):").pack(side=tk.LEFT, padx=5, pady=5)
+        self.entry_idx2 = ttk.Entry(bottom_frame, width=10)
+        self.entry_idx2.pack(side=tk.LEFT, padx=5)
         
-        # Führt per Klick die Vergleichsfunktion aus
-        ttk.Button(bottom_frame, text="Vergleichen", command=app._compare_points).pack(side=tk.LEFT, padx=5)
+        ttk.Button(bottom_frame, text="Vergleichen", command=self._compare_points).pack(side=tk.LEFT, padx=5)
         
-    def _apply_filters(app):
-        # Filtert Daten nach Nationality und Club. Datenpunkte, die nicht den gewählten Wert haben, werden auf False gesetzt.
-        app.df_filtered = app.df.copy()
+    def _apply_filters(self):
+        """Filtert Daten nach Nationality und Club."""
+        self.df_filtered = self.df.copy()
         
-        nat = app.var_nat.get()
+        nat = self.var_nat.get()
         if nat != '(alle)':
-            app.df_filtered = app.df_filtered[app.df_filtered['Nationality'] == nat]
+            self.df_filtered = self.df_filtered[self.df_filtered['Nationality'] == nat]
         
-        club = app.var_club.get()
+        club = self.var_club.get()
         if club != '(alle)':
-            app.df_filtered = app.df_filtered[app.df_filtered['Club Name'] == club]
+            self.df_filtered = self.df_filtered[self.df_filtered['Club Name'] == club]
         
-        # 
-        app.label_count.config(text=str(len(app.df_filtered)))
-        app._update_plot()
+        self.label_count.config(text=str(len(self.df_filtered)))
+        self._update_plot()
         
-    def _on_attr_select(app, event=None):
-        # Aktualisiert Plot bei Attribut-Auswahl.
-        indices = app.listbox.curselection()
-        app.selected_attributes = [app.all_attributes[i] for i in indices]
+    def _on_attr_select(self, event=None):
+        """Aktualisiert Plot bei Attribut-Auswahl."""
+        indices = self.listbox.curselection()
+        self.selected_attrs = [self.all_attrs[i] for i in indices]
         
-        # Max 2 Attribute können gleichzeitig ausgewählt sein.
-        if len(app.selected_attributes) > 2:
-            app.listbox.selection_clear(0, tk.END)
-            for i, attr in enumerate(app.all_attributes):
-                if attr in app.selected_attributes[-2:]:
-                    app.listbox.selection_set(app.all_attributes.index(attr))
-            app.selected_attributes = app.selected_attributes[-2:]
+        # Max 2 Attribute
+        if len(self.selected_attrs) > 2:
+            self.listbox.selection_clear(0, tk.END)
+            for i, attr in enumerate(self.all_attrs):
+                if attr in self.selected_attrs[-2:]:
+                    self.listbox.selection_set(self.all_attrs.index(attr))
+            self.selected_attrs = self.selected_attrs[-2:]
         
-        app._update_plot()
+        self._update_plot()
         
-    def _update_plot(app):
-        # Aktualisiert den Plot basierend auf Auswahl. Histogramm für 1 Attribut und Scatterplot für 2 Attribute.
-        app.fig.clear()
+    def _update_plot(self):
+        """Aktualisiert den Plot basierend auf Auswahl."""
+        self.fig.clear()
         
-        if not app.selected_attributes:
-            ax = app.fig.add_subplot(111)
+        if not self.selected_attrs:
+            ax = self.fig.add_subplot(111)
             ax.text(0.5, 0.5, 'Wähle ein Attribut', ha='center', va='center', fontsize=12)
             ax.axis('off')
-            app.canvas.draw()
+            self.canvas.draw()
             return
         
-        if len(app.selected_attributes) == 1:
-            app._plot_histogram()
+        if len(self.selected_attrs) == 1:
+            attr = self.selected_attrs[0]
+            if attr in self.numeric_cols:
+                self._plot_histogram()
+            else:
+                self._plot_category_counts()
         else:
-            app._plot_scatter()
-            
-        app.canvas.draw()
-        
-    def _plot_histogram(app):
-        # Zeigt Histogram für das ausgewählte Attribut.
-        attr = app.selected_attributes[0]
-        data = app.df_filtered[attr].dropna()
-        
-        # Falls Datenmenge leer
+            self._plot_scatter()
+
+        self.canvas.draw()
+
+    def _remove_outliers(self, series: pd.Series) -> pd.Series:
+        """Entfernt Ausreißer aus einer Series mittels Interquartile-Range."""
+        Q1 = series.quantile(0.25)
+        Q3 = series.quantile(0.75)
+        IQR = Q3 - Q1
+        lower_bound = Q1 - 1.5 * IQR
+        upper_bound = Q3 + 1.5 * IQR
+        return series[(series >= lower_bound) & (series <= upper_bound)]
+
+    def _plot_histogram(self):
+        """Zeigt Histogram für ein Attribut."""
+        attr = self.selected_attrs[0]
+        data = self.df_filtered[attr].dropna()
+
+        if not self.var_show_outliers.get():
+            data = self._remove_outliers(data)
+
         if data.empty:
-            ax = app.fig.add_subplot(111)
+            ax = self.fig.add_subplot(111)
             ax.text(0.5, 0.5, 'Keine Daten nach Filterung', ha='center', va='center', fontsize=12)
             ax.axis('off')
             return
-        
-        ax = app.fig.add_subplot(111)
+
+        ax = self.fig.add_subplot(111)
         ax.hist(data, bins=30, color='steelblue', edgecolor='black', alpha=0.7)
         ax.set_xlabel(attr, fontsize=11)
         ax.set_ylabel('Häufigkeit', fontsize=11)
-        ax.set_title(f'Verteilung: {attr} (n={len(data)})', fontsize=12, fontweight='bold')
+
+        title_suffix = "" if self.var_show_outliers.get() else " (Ausreißer ausgeblendet)"
+        ax.set_title(f'Verteilung: {attr} (n={len(data)}){title_suffix}', fontsize=12, fontweight='bold')
         ax.grid(axis='y', alpha=0.3)
-        app.fig.tight_layout()
-        
-    def _plot_scatter(app):
-        # Zeigt Scatterplot für zwei ausgewählte Attribute.
-        attr1, attr2 = app.selected_attributes[0], app.selected_attributes[1]
-        data = app.df_filtered[[attr1, attr2]].dropna()
-        
-        # Falls Datenmenge leer
+        self.fig.tight_layout()
+
+    def _plot_category_counts(self):
+        """Zeigt Balkendiagramm für kategoriale Attribute."""
+        attr = self.selected_attrs[0]
+        data = self.df_filtered[attr].dropna().astype(str)
+
         if data.empty:
-            ax = app.fig.add_subplot(111)
+            ax = self.fig.add_subplot(111)
+            ax.text(0.5, 0.5, 'Keine Daten nach Filterung', ha='center', va='center', fontsize=12)
+            ax.axis('off')
+            return
+
+        counts = data.value_counts().head(15)
+
+        ax = self.fig.add_subplot(111)
+        counts.sort_values().plot(kind='bar', ax=ax, color='steelblue', edgecolor='black', alpha=0.8)
+        ax.set_xlabel(attr)
+        ax.set_ylabel('Häufigkeit')
+        ax.set_title(f'Verteilung: {attr} (Top {len(counts)})', fontsize=12, fontweight='bold')
+        ax.grid(axis='x', alpha=0.3)
+        self.fig.tight_layout()
+
+    def _plot_scatter(self):
+        """Zeigt Scatterplot für zwei Attribute."""
+        attr1, attr2 = self.selected_attrs[0], self.selected_attrs[1]
+
+        if attr1 not in self.numeric_cols or attr2 not in self.numeric_cols:
+            ax = self.fig.add_subplot(111)
+            ax.text(0.5, 0.5, 'Scatterplots sind nur für numerische Attribute möglich.',
+                    ha='center', va='center', fontsize=12)
+            ax.axis('off')
+            return
+
+        data = self.df_filtered[[attr1, attr2]].dropna()
+
+        if not self.var_show_outliers.get():
+            data = data.loc[self._remove_outliers(data[attr1]).index]
+            data = data.loc[self._remove_outliers(data[attr2]).index]
+
+        if data.empty:
+            ax = self.fig.add_subplot(111)
             ax.text(0.5, 0.5, 'Keine Daten nach Filterung', ha='center', va='center', fontsize=12)
             ax.axis('off')
             return
         
-        ax = app.fig.add_subplot(111)
+        ax = self.fig.add_subplot(111)
         ax.scatter(data[attr1], data[attr2], alpha=0.6, s=40, color='steelblue', edgecolors='black', linewidth=0.5)
         ax.set_xlabel(attr1, fontsize=11)
         ax.set_ylabel(attr2, fontsize=11)
-        ax.set_title(f'{attr1} vs {attr2} (n={len(data)})', fontsize=12, fontweight='bold')
+
+        title_suffix = "" if self.var_show_outliers.get() else " (Ausreißer ausgeblendet)"
+        ax.set_title(f'{attr1} vs {attr2} (n={len(data)}){title_suffix}', fontsize=12, fontweight='bold')
         ax.grid(True, alpha=0.3)
-        app.fig.tight_layout()
+        self.fig.tight_layout()
         
-    def _compare_points(app):
-        # Vergleicht zwei Datenpunkte nach Index.
+    def _compare_points(self):
+        """Vergleicht zwei Datenpunkte nach Index."""
         try:
-            index1 = int(app.entry_index1.get())
-            index2 = int(app.entry_index2.get())
+            idx1 = int(self.entry_idx1.get())
+            idx2 = int(self.entry_idx2.get())
         except ValueError:
             messagebox.showerror("Fehler", "Bitte gültige Indizes eingeben (Zahlen).")
             return
         
-        if not (0 <= index1 < app.num_points) or not (0 <= index2 < app.num_points):
-            messagebox.showerror("Fehler", f"Indizes müssen zwischen 0 und {app.num_points-1} liegen.")
+        if not (0 <= idx1 < self.num_points) or not (0 <= idx2 < self.num_points):
+            messagebox.showerror("Fehler", f"Indizes müssen zwischen 0 und {self.num_points-1} liegen.")
             return
         
-        if index1 == index2:
+        if idx1 == idx2:
             messagebox.showwarning("Warnung", "Wähle zwei verschiedene Datenpunkte.")
             return
         
-        row1 = app.df.iloc[index1]
-        row2 = app.df.iloc[index2]
+        row1 = self.df.iloc[idx1]
+        row2 = self.df.iloc[idx2]
         
         # Vergleichsfenster
-        comp_window = tk.Toplevel(app.root)
-        comp_window.title(f"Vergleich: Index {index1} vs {index2}")
+        comp_window = tk.Toplevel(self.root)
+        comp_window.title(f"Vergleich: Index {idx1} vs {idx2}")
         comp_window.geometry("700x500")
         
-        ttk.Label(comp_window, text=f"Datenpunkt {index1} vs Datenpunkt {index2}", font=("Arial", 12, "bold")).pack(pady=10)
+        # Überschrift
+        ttk.Label(comp_window, text=f"Datenpunkt {idx1} vs Datenpunkt {idx2}", 
+                 font=("Arial", 12, "bold")).pack(pady=10)
         
         # Text-Widget für Vergleich
         text_widget = tk.Text(comp_window, height=25, width=80, font=("Courier", 9))
         text_widget.pack(fill=tk.BOTH, expand=True, padx=10, pady=10)
         
-        text_widget.insert(tk.END, f"{'Attribut':<30} {'Index {}':<20} {'Index {}':<20} {'Differenz':<15}\n".format(index1, index2))
+        text_widget.insert(tk.END, f"{'Attribut':<30} {'Index {}':<20} {'Index {}':<20} {'Differenz':<15}\n".format(idx1, idx2))
         text_widget.insert(tk.END, "-" * 85 + "\n")
         
-        for col in app.df.columns:
+        for col in self.df.columns:
             val1 = row1[col]
             val2 = row2[col]
             
@@ -227,12 +295,12 @@ class VisualizationApp:
         
         text_widget.config(state=tk.DISABLED)
         
-    def run(app):
-        # Startet die GUI.
-        app.root.mainloop()
+    def run(self):
+        """Startet die GUI."""
+        self.root.mainloop()
 
 
 def visualize(df: pd.DataFrame, output_dir: str = 'plots'):
-    # Startet die interaktive Visualisierungs-GUI.
+    """Startet die interaktive Visualisierungs-GUI."""
     app = VisualizationApp(df)
     app.run()
