@@ -1,7 +1,7 @@
 import sys
 import traceback
-import visualisierung
 import bereinigung
+import visualisierung_dash
 
 if __name__ == '__main__':
     # Modusabfrage: bereinigung oder visualisierung
@@ -20,8 +20,8 @@ if __name__ == '__main__':
             print("Bereinigung fehlgeschlagen. Keine Visualisierung möglich.")
             sys.exit(1)
         try:
-            visualisierung.visualize(df_clean, output_dir='plots')
+            app = visualisierung_dash.build_app(df_clean)
+            app.run(debug=True, use_reloader=False, host='127.0.0.1', port=8050)
         except Exception as e:
             print(f"FEHLER bei Visualisierung: {e}")
             traceback.print_exc()
-    pass
