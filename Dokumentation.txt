@@ -1,47 +1,10 @@
-Die Daten scheinen ein Ausgzug aus der Datenbank für ein Fifa-Spiel zu sein.
-Spaltennamen waren in Anführungszeichen, was problematisch für weitere Verarbeitung sein kann.
-Manche Spaltennamen hatten "ueffef" vorne
+Bereinigung:
+    duplikate entfernen -> alle werte zu float parsen (text-fehler zu NaN)
+Bei Auswahl von Attributen werden Datenpunkte mit NaN gelöscht
 
-
-Ausgabe von main.py: bereinigung
---- Spalten im Datensatz ---
-["\ufeff'Known As'", "'Full Name'", "'Overall'", "'Potential'", "'Value(in Euro)'", "'Positions Played'", "'Best Position'", "'Nationality'", "'Image Link'", "'Age'", "'Height(in cm)'", "'Weight(in kg)'", "'TotalStats'", "'BaseStats'", "'Club Name'", "'Wage(in Euro)'", "'Release Clause'", "'Club Position'", "'Contract Until'", "'Club Jersey Number'", "'Joined On'", "'On Loan'", "'Preferred Foot'", "'Weak Foot Rating'", "'Skill Moves'", "'International Reputation'", "'National Team Name'", "'National Team Image Link'", "'National Team Position'", "'National Team Jersey Number'", "'Attacking Work Rate'", "'Defensive Work Rate'", "'Pace Total'", "'Shooting Total'", "'Passing Total'", "'Dribbling Total'", "'Defending Total'", "'Physicality Total'", "'Crossing'", "'Finishing'", "'Heading Accuracy'", "'Short Passing'", "'Volleys'", "'Dribbling'", "'Curve'", "'Freekick Accuracy'", "'LongPassing'", "'BallControl'", "'Acceleration'", "'Sprint Speed'", "'Agility'", "'Reactions'", "'Balance'", "'Shot Power'", "'Jumping'", "'Stamina'", "'Strength'", "'Long Shots'", "'Aggression'", "'Interceptions'", "'Positioning'", "'Vision'", "'Penalties'", "'Composure'", "'Marking'", "'Standing Tackle'", "'Sliding Tackle'", "'Goalkeeper Diving'", "'Goalkeeper Handling'", "' GoalkeeperKicking'", "'Goalkeeper Positioning'", "'Goalkeeper Reflexes'", "'ST Rating'", "'LW Rating'", "'LF Rating'", "'CF Rating'", "'RF Rating'", "'RW Rating'", "'CAM Rating'", "'LM Rating'", "'CM Rating'", "'RM Rating'", "'LWB Rating'", "'CDM Rating'", "'RWB Rating'", "'LB Rating'", "'CB Rating'", "'RB Rating'", "'GK Rating'"]
-
-Anzahl Zeilen (vor Bereinigung): 9022
-
---- Spalten nach Bereinigung ---
-['Known As', 'Full Name', 'Overall', 'Potential', 'Value(in Euro)', 'Positions Played', 'Best Position', 'Nationality', 'Image Link', 'Age', 'Height(in cm)', 'Weight(in kg)', 'TotalStats', 'BaseStats', 'Club Name', 'Wage(in Euro)', 'Release Clause', 'Club Position', 'Contract Until', 'Club Jersey Number', 'Joined On', 'On Loan', 'Preferred Foot', 'Weak Foot Rating', 'Skill Moves', 'International Reputation', 'National Team Name', 'National Team Image Link', 'National Team Position', 'National Team Jersey Number', 'Attacking Work Rate', 'Defensive Work Rate', 'Pace Total', 'Shooting Total', 'Passing Total', 'Dribbling Total', 'Defending Total', 'Physicality Total', 'Crossing', 'Finishing', 'Heading Accuracy', 'Short Passing', 'Volleys', 'Dribbling', 'Curve', 'Freekick Accuracy', 'LongPassing', 'BallControl', 'Acceleration', 'Sprint Speed', 'Agility', 'Reactions', 'Balance', 'Shot Power', 'Jumping', 'Stamina', 'Strength', 'Long Shots', 'Aggression', 'Interceptions', 'Positioning', 'Vision', 'Penalties', 'Composure', 'Marking', 'Standing Tackle', 'Sliding Tackle', 'Goalkeeper Diving', 'Goalkeeper Handling', 'GoalkeeperKicking', 'Goalkeeper Positioning', 'Goalkeeper Reflexes', 'ST Rating', 'LW Rating', 'LF Rating', 'CF Rating', 'RF Rating', 'RW Rating', 'CAM Rating', 'LM Rating', 'CM Rating', 'RM Rating', 'LWB Rating', 'CDM Rating', 'RWB Rating', 'LB Rating', 'CB Rating', 'RB Rating', 'GK Rating']
-
-Anzahl Zeilen (nach Bereinigung): 9022
-
-Datentypen nach Parsing:
-Known As              str
-Full Name             str
-Overall             Int64
-Potential           Int64
-Value(in Euro)    Float64
-                   ...   
-RWB Rating          Int64
-LB Rating           Int64
-CB Rating           Int64
-RB Rating           Int64
-GK Rating           Int64
-Length: 89, dtype: object
-
-Fehlende Werte (NaN) pro Spalte (Spalten mit Lücken):
-Value(in Euro)                    2
-Height(in cm)                     1
-Club Jersey Number               43
-National Team Jersey Number    8628
-Goalkeeper Handling               1
-dtype: int64
-
---- Häufige Datenfehler ---
-Doppelte Zeilen insgesamt: 47
-Fehlerhafte Integer-Werte (Parsen fehlgeschlagen):
-  Club Jersey Number: 43
-  National Team Jersey Number: 8628
-Fehlerhafte Float-Werte (Parsen fehlgeschlagen):
-  Value(in Euro): 2
-Fehlerhafte Boolean-Werte (Ungültige Werte):
-  On Loan: 8462
+Qualitätsmetriken:
+  R² Score: {r2:.6f}    --> Anteil der erklärten Varianz; dimensionslos.
+  RMSE: {rmse:.6f}      --> Wurzel aus MSE; gleiche Einheit wie das Ziel. 
+  MAE: {mae:.6f}        --> Mittlere absolute Abweichung; weniger empfindlich gegenüber Ausreißern.
+  MSE: {mse:.6f}        --> Durchschnitt der quadrierten Fehler; bestraft große Abweichungen stärker.
+https://www.techzeitgeist.de/regression-leicht-erklaert-mse-rmse-mae-r%C2%B2-mape-verstaendlich/#kapitel1
