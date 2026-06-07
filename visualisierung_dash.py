@@ -1,6 +1,8 @@
 import dash
 from dash import html, dcc, Input, Output, State, dash_table
 import plotly.express as px
+import plotly.graph_objects as go
+from plotly.subplots import make_subplots
 import pandas as pd
 import numpy as np
 import bereinigung
@@ -35,6 +37,53 @@ def split_outliers_series(s: pd.Series):
     clean = s[(s >= lower) & (s <= upper)]
     outliers = s[(s < lower) | (s > upper)]
     return clean, outliers
+
+def build_numeric_figure(plot_series: pd.Series, attr: str, outlier_count: int, outlier_mode: str):
+    fig = make_subplots(
+        rows=1,
+        cols=2,
+        column_widths=[0.28, 0.72],
+        horizontal_spacing=0.12,
+        subplot_titles=(f'Boxplot: {attr}', f'Histogramm: {attr}')
+    )
+
+    box_color = 'red' if outlier_mode == 'highlight' and outlier_count > 0 else 'steelblue'
+    boxpoints = 'outliers' if outlier_mode != 'hide' else False
+
+    # Boxplot
+    fig.add_trace(
+        go.Box(
+            y=plot_series,
+            orientation='v',
+            name=attr,
+            boxpoints=boxpoints,
+            jitter=0.3,
+            pointpos=-1.8,
+            marker=dict(color=box_color, size=6),
+            line=dict(color='steelblue')
+        ),
+        row=1,
+        col=1
+    )
+
+    # Histogramm
+    fig.add_trace(
+        go.Histogram(
+            x=plot_series,
+            nbinsx=30,
+            marker=dict(color='steelblue', line=dict(color='black', width=1)),
+            opacity=0.8,
+            showlegend=False
+        ),
+        row=1,
+        col=2
+    )
+
+    fig.update_xaxes(title_text=attr, row=1, col=2)
+    fig.update_yaxes(title_text=attr, row=1, col=1)
+    fig.update_yaxes(title_text='Häufigkeit', row=1, col=2)
+    fig.update_layout(margin=dict(l=10, r=10, t=70, b=30), height=500, showlegend=False)
+    return fig
 
 def prepare_dataframe():
     df = bereinigung.clean_dataframe(bereinigung.file_path, verbose=False)
@@ -216,37 +265,9 @@ def build_app(df: pd.DataFrame):
                     )
                     return fig, '', info_count, info_selected, warnings_list
 
-                fig = px.histogram(
-                    plot_series,
-                    nbins=30,
-                    title=f'Histogramm: {attr} (n={len(plot_series)})'
-                )
-
-                # Ausreißer deutlich markieren
-                if outlier_mode == 'highlight' and not outlier_series.empty:
-                    fig.add_vline(
-                        x=float(outlier_series.min()),
-                        line_width=2,
-                        line_dash="dash",
-                        line_color="red",
-                        annotation_text=f"Ausreißer min: {outlier_series.min():.2f}",
-                        annotation_position="top left"
-                    )
-                    fig.add_vline(
-                        x=float(outlier_series.max()),
-                        line_width=2,
-                        line_dash="dash",
-                        line_color="red",
-                        annotation_text=f"Ausreißer max: {outlier_series.max():.2f}",
-                        annotation_position="top right"
-                    )
-
-                outlier_msg = f" | Ausreißer: {len(outlier_series)}" if len(
-                    outlier_series) > 0 else " | Keine Ausreißer"
-                fig.update_layout(
-                    margin=dict(l=10, r=10, t=50, b=30),
-                    title=f'Histogramm: {attr} (n={len(plot_series)}{outlier_msg})'
-                )
+                fig = build_numeric_figure(plot_series, attr, len(outlier_series), outlier_mode)
+                outlier_msg = f" | Ausreißer: {len(outlier_series)}" if len(outlier_series) > 0 else " | Keine Ausreißer"
+                fig.update_layout(title=f'Verteilung: {attr} (n={len(plot_series)}{outlier_msg})')
 
                 warning_text = ''
                 if outlier_mode == 'hide' and len(outlier_series) > 0:
@@ -377,7 +398,7 @@ def build_app(df: pd.DataFrame):
                 diff = float(v2) - float(v1)
                 compare_rows.append({'Attribut': col, 'Index1': v1, 'Index2': v2, 'Differenz': diff})
             else:
-                compare_rows.append({'Attribut': col, 'Index1': str(v1), 'Index2': str(v2), 'Differenz': 'â€”'})
+                compare_rows.append({'Attribut': col, 'Index1': str(v1), 'Index2': str(v2), 'Differenz': '-'})
 
         table = dash_table.DataTable(
             data=compare_rows,
