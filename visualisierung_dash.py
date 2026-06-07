@@ -174,19 +174,77 @@ def build_app(df: pd.DataFrame):
                     html.Div(className="card", children=[
                         html.Div(className="card-body", children=[
                             html.H5("Zwei Datenpunkte vergleichen", className="card-title"),
-                            html.Div(className="row g-2 align-items-center", children=[
-                                html.Div(className="col-auto", children=[
+
+                            html.Div(className="row g-2 align-items-end", children=[
+                                html.Div(className="col-md-4", children=[
                                     html.Label("Index 1", className="form-label"),
-                                    dcc.Input(id='idx1', type='number', min=0, max=len(df)-1, value=0, className="form-control")
+                                    dcc.Input(
+                                        id='idx1',
+                                        type='number',
+                                        min=0,
+                                        max=len(df) - 1,
+                                        value=0,
+                                        className="form-control"
+                                    )
                                 ]),
-                                html.Div(className="col-auto", children=[
+                                html.Div(className="col-md-4", children=[
                                     html.Label("Index 2", className="form-label"),
-                                    dcc.Input(id='idx2', type='number', min=0, max=len(df)-1, value=1, className="form-control")
+                                    dcc.Input(
+                                        id='idx2',
+                                        type='number',
+                                        min=0,
+                                        max=len(df) - 1,
+                                        value=1,
+                                        className="form-control"
+                                    )
                                 ]),
-                                html.Div(className="col-auto mt-4", children=[
-                                    html.Button("Vergleichen", id='btn-compare', n_clicks=0, className="btn btn-primary")
-                                ])
+                                html.Div(className="col-md-4", children=[
+                                    html.Label("Ausgewähltes Ziel", className="form-label"),
+                                    dcc.Dropdown(
+                                        id='compare-target',
+                                        options=[
+                                            {'label': 'Index 1 setzen', 'value': 'idx1'},
+                                            {'label': 'Index 2 setzen', 'value': 'idx2'}
+                                        ],
+                                        value='idx1',
+                                        clearable=False
+                                    )
+                                ]),
                             ]),
+
+                            html.Div(className="mt-3", children=[
+                                html.Button("Vergleichen", id='btn-compare', n_clicks=0, className="btn btn-primary")
+                            ]),
+
+                            html.Hr(),
+
+                            html.H6("Zeilenübersicht", className="card-subtitle mb-2 text-muted"),
+                            html.Div(
+                                dash_table.DataTable(
+                                    id='row-table',
+                                    columns=[{'name': 'Index', 'id': 'Index'}] + [
+                                        {'name': col, 'id': col} for col in df.columns[:8]
+                                    ],
+                                    data=[
+                                        {'Index': i, **{col: str(df.iloc[i][col]) for col in df.columns[:8]}}
+                                        for i in range(len(df))
+                                    ],
+                                    row_selectable='single',
+                                    selected_rows=[],
+                                    page_size=10,
+                                    sort_action='native',
+                                    filter_action='native',
+                                    style_table={'overflowX': 'auto', 'maxHeight': '350px', 'overflowY': 'auto'},
+                                    style_cell={
+                                        'textAlign': 'left',
+                                        'padding': '6px',
+                                        'whiteSpace': 'normal',
+                                        'fontSize': '13px'
+                                    },
+                                    style_header={'fontWeight': 'bold'},
+                                )
+                            ),
+
                             html.Hr(),
                             html.Div(id='compare-output')
                         ])
@@ -195,6 +253,23 @@ def build_app(df: pd.DataFrame):
             ])
         ])
     ], style={'paddingBottom': '30px'})
+
+    @app.callback(
+        Output('idx1', 'value'),
+        Output('idx2', 'value'),
+        Input('row-table', 'selected_rows'),
+        State('compare-target', 'value'),
+        prevent_initial_call=True
+    )
+    def fill_compare_indices(selected_rows, target):
+        if not selected_rows:
+            raise dash.exceptions.PreventUpdate
+
+        selected_idx = selected_rows[0]
+
+        if target == 'idx2':
+            return dash.no_update, selected_idx
+        return selected_idx, dash.no_update
 
     # Update plot + info
     @app.callback(
@@ -208,6 +283,7 @@ def build_app(df: pd.DataFrame):
         Input('dropdown-attrs', 'value'),
         Input('outlier-mode', 'value')
     )
+
     def update_plot(nat, club, attrs, outlier_mode):
         df_f = df.copy()
         warnings_list = []
@@ -370,12 +446,17 @@ def build_app(df: pd.DataFrame):
     @app.callback(
         Output('compare-output', 'children'),
         Input('btn-compare', 'n_clicks'),
+        Input('row-table', 'selected_rows'),
         State('idx1', 'value'),
         State('idx2', 'value')
     )
-    def compare_points(n_clicks, idx1, idx2):
+    def compare_points(n_clicks, selected_rows, idx1, idx2):
+        if selected_rows:
+            pass
+
         if n_clicks is None or n_clicks == 0:
             return ''
+
         try:
             idx1 = int(idx1)
             idx2 = int(idx2)
@@ -385,7 +466,8 @@ def build_app(df: pd.DataFrame):
         if idx1 == idx2:
             return html.Div(className="alert alert-warning", children="Wähle zwei verschiedene Indizes.")
         if not (0 <= idx1 < len(df)) or not (0 <= idx2 < len(df)):
-            return html.Div(className="alert alert-danger", children=f"Indizes müssen zwischen 0 und {len(df)-1} liegen.")
+            return html.Div(className="alert alert-danger",
+                            children=f"Indizes müssen zwischen 0 und {len(df) - 1} liegen.")
 
         row1 = df.iloc[idx1]
         row2 = df.iloc[idx2]
@@ -394,7 +476,12 @@ def build_app(df: pd.DataFrame):
         for col in df.columns:
             v1 = row1[col]
             v2 = row2[col]
-            if pd.api.types.is_number(v1) and pd.api.types.is_number(v2) and not pd.isna(v1) and not pd.isna(v2):
+            if (
+                    pd.notna(v1)
+                    and pd.notna(v2)
+                    and isinstance(v1, (int, float, np.integer, np.floating))
+                    and isinstance(v2, (int, float, np.integer, np.floating))
+            ):
                 diff = float(v2) - float(v1)
                 compare_rows.append({'Attribut': col, 'Index1': v1, 'Index2': v2, 'Differenz': diff})
             else:
