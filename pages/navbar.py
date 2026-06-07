@@ -6,6 +6,7 @@ def create_navbar():
     return dbc.NavbarSimple(
         children=[
             dbc.NavItem(dbc.NavLink("Regression", href="/regression", active="exact")),
+            dbc.NavItem(dbc.NavLink("K-Means", href="/kmeans", active="exact")),
             dbc.NavItem(dbc.NavLink("Bereinigte Tabelle", href="/cleaned-table", active="exact")),
         ],
         brand="InfoVis - Wein Analyse",

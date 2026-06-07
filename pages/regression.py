@@ -1,9 +1,10 @@
-from dash import Dash, dcc, html, Input, Output, callback
+from dash import Dash, dcc, html, Input, Output
 import dash_bootstrap_components as dbc
 import plotly.graph_objects as go
 from pages.navbar import create_navbar
 from pages.regression_model import RegressionModel
 from pages.cleaned_table import create_cleaned_table_layout
+from pages.k_means_clustering import create_kmeans_layout
 
 
 class Regression:
@@ -36,6 +37,8 @@ class Regression:
         def display_page(pathname):
             if pathname == "/cleaned-table":
                 return create_cleaned_table_layout(self)
+            if pathname == "/kmeans":
+                return create_kmeans_layout(self)
             return self._create_regression_layout()
 
         @self.app.callback(

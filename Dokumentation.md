@@ -15,3 +15,8 @@ Bei Auswahl von Attributen werden Datenpunkte mit NaN gelöscht
   MAE: {mae:.6f}        --> Mittlere absolute Abweichung; weniger empfindlich gegenüber Ausreißern.
   MSE: {mse:.6f}        --> Durchschnitt der quadrierten Fehler; bestraft große Abweichungen stärker.
 https://www.techzeitgeist.de/regression-leicht-erklaert-mse-rmse-mae-r%C2%B2-mape-verstaendlich/#kapitel1
+
+# k-Means
+- beste K = 4, denn:
+  - Silhouette-Score: 0.274 (höchster Wert)
+  - Davies-Bouldin Index: 1.08 (niedrigster Wert)
