@@ -1,8 +1,6 @@
 import pandas as pd
 import warnings
-from datetime import datetime
 import numpy as np
-import sys
 import traceback
 
 file_path = 'Daten/Praktikum-1.csv'
@@ -86,7 +84,15 @@ def parse_text(value):
 def clean_dataframe(path, verbose=True):
     try:
         warnings.filterwarnings('ignore', category=pd.errors.ParserWarning)
-        df = pd.read_csv(path, sep=None, engine='python', on_bad_lines='warn')
+        df = pd.read_csv(
+            path,
+            sep=',',
+            quotechar="'",
+            engine='c',
+            encoding='utf-8-sig',
+            low_memory=False,
+            on_bad_lines='warn'
+        )
 
         if verbose:
             print("--- Spalten im Datensatz ---")
@@ -97,7 +103,7 @@ def clean_dataframe(path, verbose=True):
         df.columns = df.columns.str.replace("'", "").str.replace('"', "").str.strip()
         df.columns = [col.encode("ascii", "ignore").decode("utf-8") if isinstance(col, str) and col.startswith("\ufeff") else col for col in df.columns]
 
-        raw_df = df.copy()
+        raw_df = df.copy() if verbose else None
 
         if verbose:
             print(f"\n--- Spalten nach Bereinigung ---")
@@ -106,35 +112,36 @@ def clean_dataframe(path, verbose=True):
         # Text-Spalten parsen
         for col in TEXT_COLUMNS:
             if col in df.columns:
-                df[col] = df[col].apply(parse_text)
+                df[col] = df[col].fillna('').astype(str).str.strip()
             elif verbose:
                 print(f"WARNUNG: Spalte '{col}' nicht gefunden")
 
         # Integer-Spalten parsen
         for col in INTEGER_COLUMNS:
             if col in df.columns:
-                df[col] = df[col].apply(parse_integer).astype('Int64')
+                df[col] = pd.to_numeric(df[col].replace({'-': pd.NA, '': pd.NA}), errors='coerce').astype('Int64')
             elif verbose:
                 print(f"WARNUNG: Spalte '{col}' nicht gefunden")
 
         # Float-Spalten parsen
         for col in FLOAT_COLUMNS:
             if col in df.columns:
-                df[col] = df[col].apply(parse_currency).astype('Float64')
+                df[col] = pd.to_numeric(df[col].replace({'-': pd.NA, '': pd.NA}), errors='coerce').astype('Float64')
             elif verbose:
                 print(f"WARNUNG: Spalte '{col}' nicht gefunden")
 
         # Boolean-Spalten parsen
         for col in BOOLEAN_COLUMNS:
             if col in df.columns:
-                df[col] = df[col].apply(parse_boolean).astype('bool')
+                normalized = df[col].fillna('').astype(str).str.strip().str.lower()
+                df[col] = normalized.isin(['yes', 'true', '1'])
             elif verbose:
                 print(f"WARNUNG: Spalte '{col}' nicht gefunden")
 
         # Datum-Spalten parsen
         for col in DATE_COLUMNS:
             if col in df.columns:
-                df[col] = df[col].apply(parse_date)
+                df[col] = pd.to_datetime(df[col].replace({'-': pd.NA, '': pd.NA}), errors='coerce')
             elif verbose:
                 print(f"WARNUNG: Spalte '{col}' nicht gefunden")
 
@@ -161,7 +168,7 @@ def clean_dataframe(path, verbose=True):
                 raw_series = raw_df[column] # Originalspalte
                 valid_source = raw_series.notna() & (raw_series != '') & (raw_series != '-') # Datenpunkt mit Inhalt
                 invalid_values = valid_source & parsed_data.isna() # NaN nach Parsing, dass vorher nicht NaN war
-                return invalid_values.sum()
+                return int(invalid_values.sum())
 
             # Ruft die Funktion nach Spaltennamen auf und speichert die Fehleranzahl
             int_errors = {col: count_parse_errors(col, df[col]) for col in INTEGER_COLUMNS if col in df.columns}
@@ -173,7 +180,7 @@ def clean_dataframe(path, verbose=True):
                 if col in df.columns:
                     raw_bool = raw_df[col].astype(str).str.strip().str.lower()
                     invalid_bool = raw_df[col].notna() & ~raw_bool.isin(['', '-', 'yes', 'true', '1', 'no', 'false', '0'])
-                    boolean_errors[col] = invalid_bool.sum()
+                    boolean_errors[col] = int(invalid_bool.sum())
 
             if any(v > 0 for v in int_errors.values()):
                 print("Fehlerhafte Integer-Werte (Parsen fehlgeschlagen):")

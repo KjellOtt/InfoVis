@@ -6,6 +6,8 @@ from plotly.subplots import make_subplots
 import pandas as pd
 import numpy as np
 import bereinigung
+from pages.navbar import create_navbar
+from pages.table import create_cleaned_table_layout
 
 BOOTSTRAP_CSS = "https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css"
 
@@ -92,32 +94,9 @@ def prepare_dataframe():
     df = df.reset_index(drop=True)
     return df
 
-def build_app(df: pd.DataFrame):
-    numeric_cols = df.select_dtypes(include=[np.number]).columns.tolist()
-    for col in df.columns:
-        if pd.api.types.is_integer_dtype(df[col].dtype) and col not in numeric_cols:
-            numeric_cols.append(col)
-
-    categorical_candidates = [c for c in [
-        'Known As', 'Full Name', 'Positions Played', 'Best Position',
-        'Nationality', 'Club Name', 'Club Position', 'Preferred Foot',
-        'Attacking Work Rate', 'Defensive Work Rate'
-    ] if c in df.columns]
-
-    all_attrs = sorted(list(dict.fromkeys(numeric_cols + categorical_candidates)))
-
-    nat_options = ['(alle)'] + sorted(df['Nationality'].dropna().unique().tolist()) if 'Nationality' in df.columns else ['(alle)']
-    club_options = ['(alle)'] + sorted(df['Club Name'].dropna().unique().tolist()) if 'Club Name' in df.columns else ['(alle)']
-
-    app = dash.Dash(__name__, external_stylesheets=[BOOTSTRAP_CSS])
-
-    app.layout = html.Div([
-        # Header
-        html.Nav(className="navbar navbar-dark bg-dark mb-3", children=[
-            html.Div(className="container-fluid", children=[
-                html.Span("InfoVis - Visualisierung", className="navbar-brand mb-0 h1")
-            ])
-        ]),
+def create_analysis_layout(df: pd.DataFrame, nat_options, club_options, all_attrs):
+    return html.Div([
+        create_navbar(),
 
         html.Div(className="container-fluid", children=[
             html.Div(className="row", children=[
@@ -127,15 +106,33 @@ def build_app(df: pd.DataFrame):
                         html.Div(className="card-body", children=[
                             html.H5("Filter", className="card-title"),
                             html.Label("Nationality", className="form-label"),
-                            dcc.Dropdown(id='dropdown-nat', options=[{'label': v, 'value': v} for v in nat_options], value='(alle)', clearable=False),
+                            dcc.Dropdown(
+                                id='dropdown-nat',
+                                options=[{'label': v, 'value': v} for v in nat_options],
+                                value='(alle)',
+                                clearable=False
+                            ),
                             html.Br(),
                             html.Label("Club", className="form-label"),
-                            dcc.Dropdown(id='dropdown-club', options=[{'label': v, 'value': v} for v in club_options], value='(alle)', clearable=False),
+                            dcc.Dropdown(
+                                id='dropdown-club',
+                                options=[{'label': v, 'value': v} for v in club_options],
+                                value='(alle)',
+                                clearable=False
+                            ),
                             html.Br(),
                             html.Label("Attribute (max 2)", className="form-label"),
-                            dcc.Dropdown(id='dropdown-attrs', options=[{'label': a, 'value': a} for a in all_attrs],
-                                         value=[], multi=True, placeholder='Wähle 1-2 Attribute'),
-                            html.Small("Numerische Attribute: Histogramm/Scatter. Kategorial: Balken.", className="form-text text-muted"),
+                            dcc.Dropdown(
+                                id='dropdown-attrs',
+                                options=[{'label': a, 'value': a} for a in all_attrs],
+                                value=[],
+                                multi=True,
+                                placeholder='Wähle 1-2 Attribute'
+                            ),
+                            html.Small(
+                                "Numerische Attribute: Histogramm/Scatter. Kategorial: Balken.",
+                                className="form-text text-muted"
+                            ),
                             html.Br(),
                             html.Div(className="mt-2", children=[
                                 html.Label("Ausreißer", className="form-label"),
@@ -159,15 +156,15 @@ def build_app(df: pd.DataFrame):
                             html.Div(id='info-selected', className="small text-muted")
                         ])
                     ]),
-                    html.Div(id='ui-warnings')  # for dynamic alerts
+                    html.Div(id='ui-warnings')
                 ]),
 
                 # Main content: Plot + compare
                 html.Div(className="col-md-9", children=[
                     html.Div(className="card mb-3", children=[
                         html.Div(className="card-body", children=[
-                            dcc.Graph(id='main-plot', style={'height':'600px'}),
-                            html.Div(id='warning-text', style={'color':'red', 'marginTop':'6px'})
+                            dcc.Graph(id='main-plot', style={'height': '600px'}),
+                            html.Div(id='warning-text', style={'color': 'red', 'marginTop': '6px'})
                         ])
                     ]),
 
@@ -251,8 +248,77 @@ def build_app(df: pd.DataFrame):
                     ])
                 ])
             ])
+        ], style={'paddingBottom': '30px'})
+    ])
+
+def build_app(df: pd.DataFrame):
+    numeric_cols = df.select_dtypes(include=[np.number]).columns.tolist()
+    for col in df.columns:
+        if pd.api.types.is_integer_dtype(df[col].dtype) and col not in numeric_cols:
+            numeric_cols.append(col)
+
+    categorical_candidates = [c for c in [
+        'Known As', 'Full Name', 'Positions Played', 'Best Position',
+        'Nationality', 'Club Name', 'Club Position', 'Preferred Foot',
+        'Attacking Work Rate', 'Defensive Work Rate'
+    ] if c in df.columns]
+
+    all_attrs = sorted(list(dict.fromkeys(numeric_cols + categorical_candidates)))
+
+    nat_options = ['(alle)'] + sorted(df['Nationality'].dropna().unique().tolist()) if 'Nationality' in df.columns else ['(alle)']
+    club_options = ['(alle)'] + sorted(df['Club Name'].dropna().unique().tolist()) if 'Club Name' in df.columns else ['(alle)']
+
+    app = dash.Dash(
+        __name__,
+        external_stylesheets=[BOOTSTRAP_CSS],
+        suppress_callback_exceptions=True
+    )
+
+    class Instance:
+        def __init__(self, df):
+            self.df = df
+
+    def render_page(pathname):
+        if pathname == "/tabelle":
+            return create_cleaned_table_layout(Instance(df))
+
+        return create_analysis_layout(df, nat_options, club_options, all_attrs)
+
+    app.layout = html.Div([
+        dcc.Location(id="url", refresh=False),
+        html.Div(id="page-content")
+    ])
+
+    app.validation_layout = html.Div([
+        app.layout,
+        html.Div([
+            html.Div(id='ui-warnings'),
+            dcc.Dropdown(id='dropdown-nat', options=[{'label': v, 'value': v} for v in nat_options], value='(alle)'),
+            dcc.Dropdown(id='dropdown-club', options=[{'label': v, 'value': v} for v in club_options], value='(alle)'),
+            dcc.Dropdown(id='dropdown-attrs', options=[{'label': a, 'value': a} for a in all_attrs], value=[], multi=True),
+            dcc.RadioItems(id='outlier-mode', options=[{'label': 'show', 'value': 'show'}], value='show'),
+            dcc.Graph(id='main-plot'),
+            html.Div(id='warning-text'),
+            html.Div(id='info-count'),
+            html.Div(id='info-selected'),
+            dcc.Input(id='idx1', type='number', value=0),
+            dcc.Input(id='idx2', type='number', value=1),
+            dcc.Dropdown(id='compare-target', options=[{'label': 'idx1', 'value': 'idx1'}], value='idx1'),
+            html.Button(id='btn-compare'),
+            dash_table.DataTable(id='row-table', columns=[{'name': 'Index', 'id': 'Index'}], data=[], row_selectable='single', selected_rows=[]),
+            html.Div(id='compare-output'),
+        ]),
+        html.Div([
+            dash_table.DataTable(id='cleaned-table', columns=[{'name': 'x', 'id': 'x'}], data=[])
         ])
-    ], style={'paddingBottom': '30px'})
+    ])
+
+    @app.callback(
+        Output("page-content", "children"),
+        Input("url", "pathname")
+    )
+    def display_page(pathname):
+        return render_page(pathname)
 
     @app.callback(
         Output('idx1', 'value'),
