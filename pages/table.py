@@ -70,6 +70,7 @@ def create_cleaned_table_layout(instance):
                                     df.to_dict("records")
                                 ),
                                 page_size=20,
+                                virtualization=True,
                                 sort_action="native",
                                 filter_action="native",
                                 fixed_rows={"headers": True},

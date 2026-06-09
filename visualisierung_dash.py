@@ -7,6 +7,7 @@ import pandas as pd
 import numpy as np
 import bereinigung
 from pages.navbar import create_navbar
+from pages.h2h import create_h2h_layout, build_h2h_sections
 from pages.table import create_cleaned_table_layout
 
 BOOTSTRAP_CSS = "https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css"
@@ -213,36 +214,6 @@ def create_analysis_layout(df: pd.DataFrame, nat_options, club_options, all_attr
                                 html.Button("Vergleichen", id='btn-compare', n_clicks=0, className="btn btn-primary")
                             ]),
 
-                            html.Hr(),
-
-                            html.H6("Zeilenübersicht", className="card-subtitle mb-2 text-muted"),
-                            html.Div(
-                                dash_table.DataTable(
-                                    id='row-table',
-                                    columns=[{'name': 'Index', 'id': 'Index'}] + [
-                                        {'name': col, 'id': col} for col in df.columns[:8]
-                                    ],
-                                    data=[
-                                        {'Index': i, **{col: str(df.iloc[i][col]) for col in df.columns[:8]}}
-                                        for i in range(len(df))
-                                    ],
-                                    row_selectable='single',
-                                    selected_rows=[],
-                                    page_size=10,
-                                    sort_action='native',
-                                    filter_action='native',
-                                    style_table={'overflowX': 'auto', 'maxHeight': '350px', 'overflowY': 'auto'},
-                                    style_cell={
-                                        'textAlign': 'left',
-                                        'padding': '6px',
-                                        'whiteSpace': 'normal',
-                                        'fontSize': '13px'
-                                    },
-                                    style_header={'fontWeight': 'bold'},
-                                )
-                            ),
-
-                            html.Hr(),
                             html.Div(id='compare-output')
                         ])
                     ])
@@ -279,8 +250,11 @@ def build_app(df: pd.DataFrame):
             self.df = df
 
     def render_page(pathname):
+        pathname = (pathname or "/").rstrip("/") or "/"
         if pathname == "/tabelle":
             return create_cleaned_table_layout(Instance(df))
+        if pathname == "/h2h":
+            return create_h2h_layout(Instance(df))
 
         return create_analysis_layout(df, nat_options, club_options, all_attrs)
 
@@ -305,8 +279,12 @@ def build_app(df: pd.DataFrame):
             dcc.Input(id='idx2', type='number', value=1),
             dcc.Dropdown(id='compare-target', options=[{'label': 'idx1', 'value': 'idx1'}], value='idx1'),
             html.Button(id='btn-compare'),
-            dash_table.DataTable(id='row-table', columns=[{'name': 'Index', 'id': 'Index'}], data=[], row_selectable='single', selected_rows=[]),
             html.Div(id='compare-output'),
+        ]),
+        html.Div([
+            dash_table.DataTable(id='h2h-table', columns=[{'name': 'x', 'id': 'x'}], data=[], row_selectable='multi', selected_row_ids=[]),
+            html.Div(id='h2h-selection-info'),
+            html.Div(id='h2h-compare'),
         ]),
         html.Div([
             dash_table.DataTable(id='cleaned-table', columns=[{'name': 'x', 'id': 'x'}], data=[])
@@ -320,22 +298,14 @@ def build_app(df: pd.DataFrame):
     def display_page(pathname):
         return render_page(pathname)
 
+
     @app.callback(
-        Output('idx1', 'value'),
-        Output('idx2', 'value'),
-        Input('row-table', 'selected_rows'),
-        State('compare-target', 'value'),
-        prevent_initial_call=True
+        Output('h2h-selection-info', 'children'),
+        Output('h2h-compare', 'children'),
+        Input('h2h-table', 'selected_row_ids')
     )
-    def fill_compare_indices(selected_rows, target):
-        if not selected_rows:
-            raise dash.exceptions.PreventUpdate
-
-        selected_idx = selected_rows[0]
-
-        if target == 'idx2':
-            return dash.no_update, selected_idx
-        return selected_idx, dash.no_update
+    def update_h2h_view(selected_row_ids):
+        return build_h2h_sections(df, selected_row_ids)
 
     # Update plot + info
     @app.callback(
@@ -512,14 +482,10 @@ def build_app(df: pd.DataFrame):
     @app.callback(
         Output('compare-output', 'children'),
         Input('btn-compare', 'n_clicks'),
-        Input('row-table', 'selected_rows'),
         State('idx1', 'value'),
         State('idx2', 'value')
     )
-    def compare_points(n_clicks, selected_rows, idx1, idx2):
-        if selected_rows:
-            pass
-
+    def compare_points(n_clicks, idx1, idx2):
         if n_clicks is None or n_clicks == 0:
             return ''
 
