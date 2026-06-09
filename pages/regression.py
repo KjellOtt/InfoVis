@@ -1,10 +1,12 @@
-from dash import Dash, dcc, html, Input, Output
+from dash import Dash, dcc, html, Input, Output, State
 import dash_bootstrap_components as dbc
 import plotly.graph_objects as go
 from pages.navbar import create_navbar
 from pages.regression_model import RegressionModel
 from pages.cleaned_table import create_cleaned_table_layout
-from pages.k_means_clustering import create_kmeans_layout
+from pages.k_means_clustering import create_kmeans_layout, create_kmeans_plot
+import base64
+import pickle
 
 
 class Regression:
@@ -28,7 +30,7 @@ class Regression:
         ], fluid=True, className="p-0")
 
     def setup_callbacks(self):
-        """Definiert die Page-Umschaltung"""
+        """Definiert die Page-Umschaltung und interaktive Callbacks"""
 
         @self.app.callback(
             Output("page-content", "children"),
@@ -56,6 +58,25 @@ class Regression:
                 return fig, "Bitte zwei verschiedene Attribute auswählen."
 
             return self.model.calculate_regression(x_attr, y_attr)
+
+        # Callback für Toggle-Button der Trennbereiche
+        @self.app.callback(
+            [Output("kmeans-show-boundaries-store", "data"),
+             Output("kmeans-plot-2", "figure"),
+             Output("kmeans-plot-3", "figure"),
+             Output("kmeans-plot-4", "figure"),
+             Output("kmeans-plot-5", "figure")],
+            Input("kmeans-toggle-button", "n_clicks"),
+            [State("kmeans-show-boundaries-store", "data"),
+             State("kmeans-data-store", "data")],
+            prevent_initial_call=True
+        )
+        def toggle_boundaries(n_clicks, show_boundaries, encoded_data):
+            new_show_boundaries = not show_boundaries
+            decoded_data = pickle.loads(base64.b64decode(encoded_data))
+            figs = create_kmeans_plot(decoded_data, new_show_boundaries)
+            
+            return [new_show_boundaries] + figs
 
     def _create_regression_layout(self):
         """Layout für Regression-Seite"""
