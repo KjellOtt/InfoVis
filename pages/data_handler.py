@@ -12,7 +12,6 @@ def bereinigen(filepath="Daten/wein.csv"):
     df = df.drop_duplicates()
     df = df.reset_index(drop=True)
 
-    # Alle Spalten in Float umwandeln
     for col in df.columns:
         df[col] = df[col].astype(str)
         df[col] = df[col].str.strip()
