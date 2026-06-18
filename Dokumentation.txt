@@ -1,0 +1,1 @@
+StratifiedKFold mit Zielvariable Survived, damit jeder Fold pro Iteration das gleiche Verhältnis zwischen Toten und Überlebenden hat
