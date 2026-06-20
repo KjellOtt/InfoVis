@@ -1,10 +1,9 @@
 import base64
 import io
-import matplotlib
-matplotlib.use("Agg")
-import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
+import plotly.graph_objects as go
+from dash import html, dcc, dash_table
 from sklearn.linear_model import LogisticRegression
 from sklearn.metrics import (
     accuracy_score,
@@ -68,6 +67,28 @@ def stratified_kfold_split(
     raise ValueError(f"Fold-Index {fold_index} ist außerhalb des Bereichs.")
 
 
+def bootstrap_632_split(
+    df: pd.DataFrame,
+    target_column: str,
+    random_state: int = 42,
+) -> tuple[pd.DataFrame, pd.DataFrame]:
+    """Erzeugt einen Bootstrap-Trainingsdatensatz und den OOB-Testdatensatz."""
+    n = len(df)
+    rng = np.random.default_rng(random_state)
+    sampled_indices = rng.choice(n, size=n, replace=True)
+    train_df = df.iloc[sampled_indices].reset_index(drop=True)
+
+    unique_train_indices = np.unique(sampled_indices)
+    oob_mask = np.ones(n, dtype=bool)
+    oob_mask[unique_train_indices] = False
+    test_df = df.iloc[oob_mask].reset_index(drop=True)
+
+    if test_df.empty:
+        return train_df, df.sample(frac=0.3, random_state=random_state)
+
+    return train_df, test_df
+
+
 def prepare_features(df: pd.DataFrame, target_column: str) -> tuple[pd.DataFrame, pd.Series]:
     features = df.drop(columns=[target_column]).copy()
     features = pd.get_dummies(features, drop_first=True)
@@ -87,20 +108,22 @@ def encode_target(y: pd.Series) -> tuple[pd.Series, list[str]]:
     return y_clean.map(mapping), labels
 
 
-def plot_roc_curve_png(curves: dict[str, tuple[np.ndarray, np.ndarray]], title: str) -> str:
-    fig, ax = plt.subplots(figsize=(6, 4))
+def plot_roc_curve_plotly(curves: dict[str, tuple[np.ndarray, np.ndarray]], title: str):
+    fig = go.Figure()
     for name, (fpr, tpr) in curves.items():
-        ax.plot(fpr, tpr, label=name)
-    ax.plot([0, 1], [0, 1], color="black", linestyle="--", label="Zufall")
-    ax.set_title(title)
-    ax.set_xlabel("False Positive Rate")
-    ax.set_ylabel("True Positive Rate")
-    ax.legend(loc="lower right")
-    ax.grid(True, linestyle="--", alpha=0.4)
-    buffer = io.BytesIO()
-    fig.savefig(buffer, format="png", bbox_inches="tight")
-    plt.close(fig)
-    return base64.b64encode(buffer.getvalue()).decode("utf-8")
+        fig.add_trace(go.Scatter(x=fpr, y=tpr, mode='lines', name=name))
+    
+    fig.add_trace(go.Scatter(x=[0, 1], y=[0, 1], mode='lines', name='Zufall', line=dict(dash='dash', color='black')))
+    
+    fig.update_layout(
+        title=title,
+        xaxis_title='False Positive Rate',
+        yaxis_title='True Positive Rate',
+        legend=dict(x=0.7, y=0.1),
+        margin=dict(l=20, r=20, t=40, b=20),
+        height=400
+    )
+    return fig
 
 
 def evaluate_classifier(
@@ -108,6 +131,7 @@ def evaluate_classifier(
     train_df: pd.DataFrame,
     test_df: pd.DataFrame,
     target_column: str,
+    method_name: str = "CV"
 ) -> dict:
     X_train, y_train = prepare_features(train_df, target_column)
     X_test, y_test = prepare_features(test_df, target_column)
@@ -137,91 +161,100 @@ def evaluate_classifier(
 
     return {
         "classifier": clf.__class__.__name__,
+        "method": method_name,
         "tn": int(tn),
         "fp": int(fp),
         "fn": int(fn),
         "tp": int(tp),
-        "accuracy": accuracy_score(y_test_enc, y_pred),
-        "precision": precision_score(y_test_enc, y_pred, zero_division=0),
-        "recall": recall_score(y_test_enc, y_pred, zero_division=0),
-        "f1": f1_score(y_test_enc, y_pred, zero_division=0),
-        "false_positive_rate": fpr_manual,
+        "accuracy": round(accuracy_score(y_test_enc, y_pred), 3),
+        "precision": round(precision_score(y_test_enc, y_pred, zero_division=0), 3),
+        "recall": round(recall_score(y_test_enc, y_pred, zero_division=0), 3),
+        "f1": round(f1_score(y_test_enc, y_pred, zero_division=0), 3),
+        "false_positive_rate": round(fpr_manual, 3),
         "roc_values": roc_values,
-        "auc": auc_score,
+        "auc": round(auc_score, 3) if auc_score is not None else 0.0,
     }
 
 
-def render_metrics_table(metrics: list[dict]) -> str:
-    header_cells = ''.join(
-        f"<th data-bs-toggle='tooltip' data-bs-placement='top' title='{METRIC_TOOLTIPS.get(col, '')}'>{col}</th>"
-        for col in [
-            "Klassifikator",
-            "TN",
-            "FP",
-            "FN",
-            "TP",
-            "Accuracy",
-            "Precision",
-            "Recall",
-            "False Positive Rate",
-            "F1",
-            "AUC",
-        ]
-    )
-    rows = []
-    for metric in metrics:
-        rows.append(
-            f"""
-            <tr>
-              <td>{metric['classifier']}</td>
-              <td>{metric['tn']}</td>
-              <td>{metric['fp']}</td>
-              <td>{metric['fn']}</td>
-              <td>{metric['tp']}</td>
-              <td>{metric['accuracy']:.3f}</td>
-              <td>{metric['precision']:.3f}</td>
-              <td>{metric['recall']:.3f}</td>
-              <td>{metric['false_positive_rate']:.3f}</td>
-              <td>{metric['f1']:.3f}</td>
-              <td>{metric['auc']:.3f}</td>
-            </tr>
-            """
+def render_metrics_table(metrics: list[dict]):
+    table_data = []
+    for m in metrics:
+        table_data.append({
+            "Methode": m["method"],
+            "Klassifikator": m["classifier"],
+            "TN": m["tn"],
+            "FP": m["fp"],
+            "FN": m["fn"],
+            "TP": m["tp"],
+            "Acc": m["accuracy"],
+            "Prec": m["precision"],
+            "Rec": m["recall"],
+            "FPR": m["false_positive_rate"],
+            "F1": m["f1"],
+            "AUC": m["auc"]
+        })
+
+    return html.Div([
+        dash_table.DataTable(
+            data=table_data,
+            columns=[{"name": i, "id": i} for i in table_data[0].keys()],
+            style_table={'overflowX': 'auto'},
+            style_cell={'textAlign': 'center', 'padding': '5px'},
+            style_header={
+                'backgroundColor': 'rgb(30, 30, 30)',
+                'color': 'white',
+                'fontWeight': 'bold'
+            },
+            style_data_conditional=[
+                {
+                    'if': {'row_index': 'odd'},
+                    'backgroundColor': 'rgb(248, 248, 248)'
+                }
+            ]
         )
-    return f"""
-      <div class='table-responsive mb-4'>
-        <table class='table table-sm table-hover table-bordered'>
-          <thead class='table-dark'>
-            <tr>
-              {header_cells}
-            </tr>
-          </thead>
-          <tbody>
-            {''.join(rows)}
-          </tbody>
-        </table>
-      </div>
-    """
+    ], className="table-responsive mb-4")
 
 
-def prepare_evaluation_html(cleaned: pd.DataFrame, target_column: str) -> str:
-    train_df, test_df = stratified_kfold_split(cleaned, target_column)
+def prepare_evaluation_html(cleaned: pd.DataFrame, target_column: str):
+    train_kf, test_kf = stratified_kfold_split(cleaned, target_column)
+    train_bs, test_bs = bootstrap_632_split(cleaned, target_column)
+
     metrics = []
     roc_curves = {}
+    
     for display_name, factory in CLASSIFIERS.items():
-        result = evaluate_classifier(factory, train_df, test_df, target_column)
-        metrics.append(result)
-        if result['roc_values'] is not None:
-            roc_curves[display_name] = result['roc_values']
+        # CV
+        res_cv = evaluate_classifier(factory, train_kf, test_kf, target_column, "10-Fold CV")
+        metrics.append(res_cv)
+        if res_cv['roc_values'] is not None:
+            roc_curves[f"{display_name} (CV)"] = res_cv['roc_values']
+            
+        # Bootstrap
+        res_bs = evaluate_classifier(factory, train_bs, test_bs, target_column, "Bootstrapping")
+        metrics.append(res_bs)
+        if res_bs['roc_values'] is not None:
+            roc_curves[f"{display_name} (BS)"] = res_bs['roc_values']
 
-    roc_html = ""
+    roc_graph = html.Div()
     if roc_curves:
-        roc_png = plot_roc_curve_png(roc_curves, 'ROC-Kurve Evaluierung')
-        roc_html = f"<div class='mb-4'><img src='data:image/png;base64,{roc_png}' class='img-fluid rounded' alt='ROC Kurve'></div>"
+        fig = plot_roc_curve_plotly(roc_curves, 'ROC-Kurven Vergleich')
+        roc_graph = html.Div([
+            html.Div([
+                html.H5("ROC-Kurven", className="card-title"),
+                dcc.Graph(figure=fig)
+            ], className="card-body text-center")
+        ], className="card mb-4")
 
-    return f"""
-      <div class='mb-4'>
-        <p>Die Evaluierung zeigt Metriken und ROC-Kurve für alle Klassifikatoren.</p>
-      </div>
-      {render_metrics_table(metrics)}
-      {roc_html}
-    """
+    return html.Div([
+        html.Div([
+            html.P([
+                "Die Evaluierung vergleicht die Performance der Klassifikatoren mittels ",
+                html.Strong("10-Fold Cross-Validation"),
+                " und ",
+                html.Strong("Bootstrapping 0.632"),
+                "."
+            ])
+        ], className="alert alert-info"),
+        render_metrics_table(metrics),
+        roc_graph
+    ])

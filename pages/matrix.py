@@ -1,10 +1,7 @@
-import base64
-import io
-import matplotlib
-matplotlib.use("Agg")
-import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
+import plotly.express as px
+from dash import html, dcc
 from sklearn.linear_model import LogisticRegression
 from sklearn.metrics import confusion_matrix
 from sklearn.model_selection import StratifiedKFold
@@ -46,50 +43,65 @@ def prepare_features(df: pd.DataFrame, target_column: str) -> tuple[pd.DataFrame
     return features.fillna(0), df[target_column].fillna("missing")
 
 
-def plot_confusion_matrix_png(cm: np.ndarray, title: str) -> str:
-    fig, ax = plt.subplots(figsize=(4, 4))
-    im = ax.imshow(cm, cmap="Blues", interpolation="nearest")
-    ax.set_title(title)
-    ax.set_xlabel("Predicted")
-    ax.set_ylabel("Actual")
-    ax.set_xticks([0, 1])
-    ax.set_yticks([0, 1])
-    ax.set_xticklabels(["Negativ", "Positiv"])
-    ax.set_yticklabels(["Negativ", "Positiv"])
-
-    for i in range(cm.shape[0]):
-        for j in range(cm.shape[1]):
-            color = "white" if cm[i, j] > cm.max() / 2 else "black"
-            ax.text(j, i, str(int(cm[i, j])), ha="center", va="center", color=color, fontsize=14)
-
-    fig.colorbar(im, ax=ax)
-    buffer = io.BytesIO()
-    fig.tight_layout()
-    fig.savefig(buffer, format="png", bbox_inches="tight")
-    plt.close(fig)
-    return base64.b64encode(buffer.getvalue()).decode("utf-8")
+def plot_confusion_matrix_plotly(cm: np.ndarray, title: str):
+    classes = ["Negativ", "Positiv"]
+    fig = px.imshow(
+        cm,
+        text_auto=True,
+        aspect="auto",
+        color_continuous_scale="Blues",
+        labels=dict(x="Predicted Label", y="True Label", color="Anzahl"),
+        x=classes,
+        y=classes,
+        title=title
+    )
+    fig.update_layout(
+        margin=dict(l=20, r=20, t=40, b=20),
+        height=300,
+        coloraxis_showscale=False
+    )
+    return fig
 
 
-def render_matrix(cleaned: pd.DataFrame, target_column: str) -> str:
+def render_matrix(cleaned: pd.DataFrame, target_column: str):
     train_df, test_df = stratified_kfold_split(cleaned, target_column)
 
-    rows = []
     figures = []
-    for name, factory in CLASSIFIERS.items():
-        X_train, y_train = prepare_features(train_df, target_column)
-        X_test, y_test = prepare_features(test_df, target_column)
-        clf = factory()
-        clf.fit(X_train, y_train.astype(str))
-        y_pred = clf.predict(X_test)
-        cm = confusion_matrix(y_test.astype(str), y_pred, labels=sorted(y_test.astype(str).unique()))
-        png = plot_confusion_matrix_png(cm, name)
-        figures.append(f"<div class='col-md-4 mb-4'><div class='card'><div class='card-body'><h5 class='card-title'>{name}</h5><img src='data:image/png;base64,{png}' class='img-fluid rounded' alt='Konfusionsmatrix {name}'></div></div></div>")
+    X_train, y_train = prepare_features(train_df, target_column)
+    X_test, y_test = prepare_features(test_df, target_column)
+    
+    # Feature Alignment
+    X_train, X_test = X_train.align(X_test, join="outer", axis=1, fill_value=0)
+    
+    y_train_str = y_train.astype(str)
+    y_test_str = y_test.astype(str)
+    labels = sorted(y_train_str.unique())
 
-    return f"""
-      <div class=\"row mb-4\">
-        <div class=\"col\"><p>Die Konfusionsmatrix zeigt für jeden Klassifikator die vier Quadranten der Vorhersagegüte.</p></div>
-      </div>
-      <div class=\"row\">
-        {''.join(figures)}
-      </div>
-    """
+    for name, factory in CLASSIFIERS.items():
+        clf = factory()
+        clf.fit(X_train, y_train_str)
+        y_pred = clf.predict(X_test)
+        cm = confusion_matrix(y_test_str, y_pred, labels=labels)
+        fig = plot_confusion_matrix_plotly(cm, name)
+        
+        figures.append(
+            html.Div([
+                html.Div([
+                    html.Div([
+                        html.H5(name, className='card-title'),
+                        dcc.Graph(figure=fig, config={'displayModeBar': False})
+                    ], className='card-body text-center')
+                ], className='card h-100 shadow-sm')
+            ], className='col-md-6 col-lg-4 mb-4')
+        )
+
+    return html.Div([
+        html.Div([
+            html.P([
+                "Die Konfusionsmatrizen basieren auf einem ",
+                html.Strong("10-Fold Cross-Validation Split"),
+                " (Fold 0). Sie zeigen die Vorhersagegüte der einzelnen Klassifikatoren im Detail."
+            ])
+        ], className="alert alert-info mb-4"),
+        html.Div(figures, className="row justify-content-center")
+    ])

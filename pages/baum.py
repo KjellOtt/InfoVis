@@ -5,6 +5,7 @@ matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
+from dash import html
 from sklearn.linear_model import LogisticRegression
 from sklearn.model_selection import StratifiedKFold
 from sklearn.neighbors import KNeighborsClassifier
@@ -46,51 +47,72 @@ def prepare_features(df: pd.DataFrame, target_column: str) -> tuple[pd.DataFrame
 
 
 def plot_tree_png(clf: DecisionTreeClassifier, feature_names: list[str], class_names: list[str]) -> str:
-    fig, ax = plt.subplots(figsize=(14, 10))
+    fig, ax = plt.subplots(figsize=(16, 10))
     plot_tree(
         clf,
         feature_names=feature_names,
         class_names=class_names,
         filled=True,
         rounded=True,
-        proportion=True,
+        proportion=False,
         ax=ax,
         fontsize=10,
+        precision=2,
+        impurity=False,
+        label='all'
     )
+    ax.set_title("Entscheidungsbaum (max_depth=4 für bessere Visualisierung)", fontsize=16, fontweight='bold')
     buffer = io.BytesIO()
     fig.tight_layout()
-    fig.savefig(buffer, format="png", bbox_inches="tight")
+    fig.savefig(buffer, format="png", bbox_inches="tight", dpi=120)
     plt.close(fig)
     return base64.b64encode(buffer.getvalue()).decode("utf-8")
 
 
-def render_tree(cleaned: pd.DataFrame, target_column: str) -> str:
+def render_tree(cleaned: pd.DataFrame, target_column: str):
     train_df, test_df = stratified_kfold_split(cleaned, target_column)
     X_train, y_train = prepare_features(train_df, target_column)
+    
+    X_train_clean = X_train.copy()
     y_train = y_train.astype(str)
 
-    clf = DecisionTreeClassifier(random_state=42)
-    clf.fit(X_train, y_train)
+    clf = DecisionTreeClassifier(max_depth=4, min_samples_leaf=5, random_state=42)
+    clf.fit(X_train_clean, y_train)
 
-    feature_names = X_train.columns.tolist()
+    feature_names = X_train_clean.columns.tolist()
     class_names = sorted(y_train.unique())
     tree_png = plot_tree_png(clf, feature_names, class_names)
     text_repr = export_text(clf, feature_names=feature_names)
 
-    return f"""
-      <div class=\"mb-4\">
-        <p>Der Entscheidungsbaum wurde mit einem Trainingsdatensatz aus Stratified 10-Fold erstellt.</p>
-      </div>
-      <div class=\"card mb-4\">
-        <div class=\"card-body\">
-          <h5 class=\"card-title\">Baumstruktur</h5>
-          <img src=\"data:image/png;base64,{tree_png}\" class=\"img-fluid rounded\" alt=\"Entscheidungsbaum\">
-        </div>
-      </div>
-      <div class=\"card\">
-        <div class=\"card-body\">
-          <h5 class=\"card-title\">Textuelle Baumrepräsentation</h5>
-          <pre style=\"white-space: pre-wrap; word-break: break-word;\">{text_repr}</pre>
-        </div>
-      </div>
-    """
+    return html.Div([
+        html.Div([
+            html.P([
+                "Der Entscheidungsbaum wurde mit ",
+                html.Strong("Stratified 10-Fold CV"),
+                " (Fold 0) trainiert. Die Tiefe wurde auf 4 Ebenen begrenzt, um eine optimale Visualisierung und Interpretierbarkeit zu gewährleisten."
+            ])
+        ], className="alert alert-info mb-4"),
+        html.Div([
+            html.Div([
+                html.H5("Grafische Baumstruktur", className="card-title mb-0")
+            ], className="card-header bg-primary text-white"),
+            html.Div([
+                html.Img(src=f"data:image/png;base64,{tree_png}", className="img-fluid rounded", alt="Entscheidungsbaum")
+            ], className="card-body text-center bg-light")
+        ], className="card mb-4 shadow-sm"),
+        html.Div([
+            html.Div([
+                html.H5("Textuelle Baumrepräsentation", className="card-title mb-0")
+            ], className="card-header bg-secondary text-white"),
+            html.Div([
+                html.Pre(text_repr, style={
+                    "whiteSpace": "pre-wrap",
+                    "wordBreak": "break-word",
+                    "backgroundColor": "#f8f9fa",
+                    "padding": "15px",
+                    "borderRadius": "5px",
+                    "fontFamily": "monospace"
+                })
+            ], className="card-body")
+        ], className="card shadow-sm")
+    ])
