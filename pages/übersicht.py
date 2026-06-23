@@ -8,7 +8,6 @@ def bereinige_daten(df: pd.DataFrame) -> tuple[pd.DataFrame, dict]:
     - Entfernt leere Spalten und Zeilen.
     - Strippt Leerzeichen von Spaltennamen.
     - Behandelt fehlende Werte (Imputation).
-    - Entfernt Duplikate.
     - Behandelt Datentypen.
     - Entfernt irrelevante Features.
     Gibt (bereinigtes df, stats_dict) zurück.
@@ -37,12 +36,7 @@ def bereinige_daten(df: pd.DataFrame) -> tuple[pd.DataFrame, dict]:
     cleaned = cleaned.dropna(how="all")
     cleaned = cleaned.dropna(axis=1, how="all")
     
-    # 5. Duplikate entfernen
-    before_dup = len(cleaned)
-    cleaned = cleaned.drop_duplicates()
-    stats['duplicates_removed'] = before_dup - len(cleaned)
-    
-    # 6. Fehlende Werte behandeln (Imputation)
+    # 5. Fehlende Werte behandeln (Imputation)
     # Numerische Spalten mit Median füllen
     num_cols = cleaned.select_dtypes(include=[np.number]).columns
     for col in num_cols:
@@ -76,7 +70,6 @@ def zeige_uebersicht(df: pd.DataFrame):
             html.Div([
                 html.H5("Zusammenfassung der Bereinigung", className="card-title"),
                 html.Ul([
-                    html.Li(f"Entfernte Duplikate: {bereinigungs_stats['duplicates_removed']}"),
                     html.Li(f"Entfernte Spalten (Irrelevant/Viele fehlende Werte): {', '.join(bereinigungs_stats['dropped_features'])}"),
                     html.Li([
                         html.Strong("Ursprünglich fehlende Werte:"),
