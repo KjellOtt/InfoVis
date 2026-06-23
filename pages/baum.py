@@ -4,6 +4,7 @@ import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 import pandas as pd
+import numpy as np
 from dash import html
 from sklearn.linear_model import LogisticRegression
 from sklearn.neighbors import KNeighborsClassifier
@@ -70,9 +71,10 @@ def render_tree(cleaned: pd.DataFrame, target_column: str):
     return html.Div([
         html.Div([
             html.P([
-                "Der Entscheidungsbaum visualisiert die gelernten Regeln des Modells. ",
-                "Die Daten wurden vorab skaliert und kodiert, um konsistent mit den anderen Klassifikatoren zu sein. ",
-                "Die Tiefe wurde auf 4 Ebenen begrenzt, um die Interpretierbarkeit zu gewährleisten."
+                "Die Daten wurden vorab verarbeitet, um konsistent mit den anderen Klassifikatoren zu sein: ",
+                html.B("Numerische Merkmale"), " wurden mit dem ", html.Code("StandardScaler"), " standardisiert, und ",
+                html.B("kategorische Merkmale"), " wurden mittels ", html.Code("OneHotEncoder"), " kodiert. ",
+                "Die Baumtiefe wurde auf 4 Ebenen begrenzt, um die Interpretierbarkeit zu gewährleisten."
             ])
         ], className="alert alert-info mb-4"),
         html.Div([

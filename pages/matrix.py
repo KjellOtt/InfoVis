@@ -81,7 +81,7 @@ def render_matrix(cleaned: pd.DataFrame, target_column: str):
             html.P([
                 "Die Konfusionsmatrizen zeigen die aggregierten Vorhersagen einer ",
                 html.Strong("10-Fold Cross-Validation"),
-                ". Dies bietet eine robustere Übersicht über die Modellleistung über den gesamten Datensatz hinweg."
+                "."
             ])
         ], className="alert alert-info mb-4"),
         html.Div(figures, className="row justify-content-center")
