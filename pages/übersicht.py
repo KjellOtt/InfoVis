@@ -83,24 +83,6 @@ def zeige_uebersicht(df: pd.DataFrame):
 
         html.Div([
             html.Div([
-                html.H5("Analyse der Datenqualität & Verteilung", className="card-title"),
-                html.P("Ein Scatterplot hilft dabei, Ausreißer zu identifizieren und den Zusammenhang zwischen Features (z.B. Alter und Ticketpreis) in Bezug auf die Zielvariable zu verstehen.", className="card-text"),
-                dcc.Graph(
-                    figure=px.scatter(
-                        cleaned, 
-                        x="Age", 
-                        y="Fare", 
-                        color=str(target_column_actual) if target_column_actual else None,
-                        hover_data=cleaned.columns,
-                        title="Zusammenhang: Alter vs. Ticketpreis (nach Überleben)",
-                        labels={"Age": "Alter", "Fare": "Ticketpreis (Fare)", "color": "Überlebt"}
-                    ).update_layout(margin=dict(l=20, r=20, t=40, b=20))
-                )
-            ], className="card-body")
-        ], className="card mb-4 shadow-sm"),
-
-        html.Div([
-            html.Div([
                 html.H5("Statistik (Bereinigt)", className="card-title"),
                 html.Div([
                     dash_table.DataTable(

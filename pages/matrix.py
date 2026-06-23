@@ -10,7 +10,7 @@ from sklearn.model_selection import StratifiedKFold, cross_val_predict
 
 CLASSIFIERS = {
     "Logistische Regression": lambda: LogisticRegression(solver="liblinear", max_iter=1000, random_state=42),
-    "Decision Tree": lambda: DecisionTreeClassifier(max_depth=4, random_state=42),
+    "Decision Tree": lambda: DecisionTreeClassifier(max_depth=None, random_state=42),
     "K-Nearest Neighbor (k=3)": lambda: KNeighborsClassifier(n_neighbors=3),
 }
 
