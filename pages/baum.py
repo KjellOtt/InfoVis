@@ -2,7 +2,6 @@ import base64
 import io
 import matplotlib
 matplotlib.use("Agg")
-import matplotlib.pyplot as plt
 import pandas as pd
 import numpy as np
 from dash import html, dcc, callback, Input, Output
@@ -18,7 +17,7 @@ from sklearn.preprocessing import StandardScaler, OneHotEncoder
 
 CLASSIFIERS = {
     "Logistische Regression": lambda: LogisticRegression(solver="liblinear", max_iter=1000, random_state=42),
-    "Decision Tree": lambda: DecisionTreeClassifier(max_depth=4, random_state=42),
+    "Decision Tree": lambda: DecisionTreeClassifier(max_depth=None, random_state=42),
     "K-Nearest Neighbor (k=3)": lambda: KNeighborsClassifier(n_neighbors=3),
 }
 
@@ -130,7 +129,7 @@ def plot_tree_plotly(clf: DecisionTreeClassifier, feature_names: list[str], clas
     return fig
 
 
-def get_tree_content(use_preprocessing: bool):
+def get_tree_content(use_preprocessing: bool, validation_method: str = "cv"):
     raw_data = pd.read_csv("Daten/Titanic.csv")
     cleaned, _ = übersicht.bereinige_daten(raw_data)
     
@@ -147,7 +146,24 @@ def get_tree_content(use_preprocessing: bool):
         return html.Div("Zielspalte nicht gefunden.", className="alert alert-danger")
 
     X = cleaned.drop(columns=[target_column])
-    y = cleaned[target_column].fillna("missing").astype(str)
+    y_raw = cleaned[target_column].fillna("missing").astype(str)
+    labels = sorted(y_raw.unique())
+    mapping = {label: i for i, label in enumerate(labels)}
+    y = y_raw.map(mapping)
+
+    rng = np.random.default_rng(42)
+    n = len(cleaned)
+    
+    if validation_method == "cv":
+        from sklearn.model_selection import StratifiedKFold
+        skf = StratifiedKFold(n_splits=10, shuffle=True, random_state=42)
+        train_idx, _ = next(skf.split(X, y))
+        X_train, y_train = X.iloc[train_idx], y.iloc[train_idx]
+        method_text = "Dies ist ein Beispielbaum, trainiert auf einem der 10 Folds."
+    else:
+        sampled_indices = rng.choice(n, size=n, replace=True)
+        X_train, y_train = X.iloc[sampled_indices], y.iloc[sampled_indices]
+        method_text = "Dies ist ein Beispielbaum, trainiert auf einem Bootstrapping-Sample."
 
     if use_preprocessing:
         num_features = X.select_dtypes(include=[np.number]).columns.tolist()
@@ -157,31 +173,24 @@ def get_tree_content(use_preprocessing: bool):
                 ('num', StandardScaler(), num_features),
                 ('cat', OneHotEncoder(handle_unknown='ignore'), cat_features)
             ])
-        X_transformed = preprocessor.fit_transform(X)
+        X_transformed = preprocessor.fit_transform(X_train)
         cat_feature_names = preprocessor.named_transformers_['cat'].get_feature_names_out(cat_features).tolist()
         feature_names = num_features + cat_feature_names
-        info_text = html.P([
-            "Die Daten wurden vorab verarbeitet, um konsistent mit den anderen Klassifikatoren zu sein: ",
-            html.B("Numerische Merkmale"), " wurden mit dem ", html.Code("StandardScaler"), " standardisiert, und ",
-            html.B("kategorische Merkmale"), " wurden mittels ", html.Code("OneHotEncoder"), " kodiert. "
-        ])
+        prep_text = "Die Daten wurden standardisiert/kodiert."
     else:
-        X_transformed = X.copy()
+        X_transformed = X_train.copy()
         for col in X_transformed.select_dtypes(exclude=[np.number]).columns:
             if col.lower() == 'sex':
                 X_transformed[col] = X_transformed[col].map({'female': 1, 'male': 0})
             else:
                 X_transformed[col] = X_transformed[col].astype('category').cat.codes
         feature_names = X.columns.tolist()
-        info_text = html.P([
-            "Die Daten sind im ", html.B("Originalzustand"), ". Kategorische Merkmale wurden für den Baum intern numerisch kodiert, aber die Spaltennamen bleiben erhalten. ",
-            "Numerische Werte wie das Alter sind in ihren Originaleinheiten (z.B. Jahre) angegeben."
-        ])
+        prep_text = "Die Daten sind im Originalzustand."
 
     clf = DecisionTreeClassifier(max_depth=None, min_samples_leaf=5, random_state=42)
-    clf.fit(X_transformed, y)
+    clf.fit(X_transformed, y_train)
 
-    class_names_raw = sorted(y.unique())
+    class_names_raw = sorted(y_raw.unique())
     class_mapping = {"0": "Not Survived", "1": "Survived"}
     class_names = [class_mapping.get(str(c), str(c)) for c in class_names_raw]
     
@@ -206,7 +215,10 @@ def get_tree_content(use_preprocessing: bool):
         ], style={"display": "inline-block"}))
 
     return html.Div([
-        html.Div([info_text], className="alert alert-info mb-4"),
+        html.Div([
+            html.P([html.B("Validierung: "), method_text]),
+            html.P([html.B("Vorverarbeitung: "), prep_text])
+        ], className="alert alert-info mb-4"),
         html.Div([
             html.Div([
                 html.H5("Interaktive Baumstruktur", className="card-title mb-0")
@@ -241,6 +253,18 @@ def render_tree(cleaned: pd.DataFrame, target_column: str):
     return html.Div([
         html.Div([
             html.Div([
+                html.Label("Validierungsmethode:", className="fw-bold me-2"),
+                dcc.RadioItems(
+                    id='tree-method-toggle',
+                    options=[
+                        {'label': ' 10-Fold Cross-Validation', 'value': 'cv'},
+                        {'label': ' Bootstrapping 0.632', 'value': 'bootstrap'}
+                    ],
+                    value='cv',
+                    labelStyle={'display': 'inline-block', 'marginRight': '20px'}
+                )
+            ], className="col-md-6"),
+            html.Div([
                 html.Label("Darstellungsmodus:", className="fw-bold me-2"),
                 dcc.RadioItems(
                     id='tree-toggle',
@@ -251,16 +275,17 @@ def render_tree(cleaned: pd.DataFrame, target_column: str):
                     value=True,
                     labelStyle={'display': 'inline-block', 'marginRight': '20px'}
                 )
-            ], className="col-md-12"),
+            ], className="col-md-6"),
         ], className="row mb-3 p-3 border rounded bg-light"),
 
-        html.Div(id='tree-container', children=get_tree_content(True))
+        html.Div(id='tree-container', children=get_tree_content(True, 'cv'))
     ])
 
 
 @callback(
     Output('tree-container', 'children'),
-    Input('tree-toggle', 'value')
+    [Input('tree-toggle', 'value'),
+     Input('tree-method-toggle', 'value')]
 )
-def update_tree(use_preprocessing):
-    return get_tree_content(use_preprocessing)
+def update_tree(use_preprocessing, validation_method):
+    return get_tree_content(use_preprocessing, validation_method)

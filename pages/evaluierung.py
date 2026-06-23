@@ -152,12 +152,21 @@ def evaluate_bootstrap_0632(classifier_factory, df: pd.DataFrame, target_column:
     rng = np.random.default_rng(42)
     
     acc_scores = []
+    prec_scores = []
+    rec_scores = []
+    f1_scores = []
+    spec_scores = []
+    auc_scores = []
+    b_acc_scores = []
+    
     # Für CM und ROC nutzen wir beispielhaft den letzten Split oder aggregieren
     all_tn, all_fp, all_fn, all_tp = [], [], [], []
     
     last_pipeline = None
     last_X_oob = None
     last_y_oob = None
+
+    from sklearn.metrics import precision_score, recall_score, f1_score, balanced_accuracy_score, roc_auc_score
 
     for i in range(n_iterations):
         sampled_indices = rng.choice(n, size=n, replace=True)
@@ -172,15 +181,34 @@ def evaluate_bootstrap_0632(classifier_factory, df: pd.DataFrame, target_column:
         pipeline = get_pipeline(classifier_factory, num_features, cat_features)
         pipeline.fit(X_train, y_train)
         
-        acc_train = accuracy_score(y_train, pipeline.predict(X_train))
-        acc_oob = accuracy_score(y_oob, pipeline.predict(X_oob))
+        y_pred_train = pipeline.predict(X_train)
+        y_pred_oob = pipeline.predict(X_oob)
+
+        # Accuracy .632
+        acc_train = accuracy_score(y_train, y_pred_train)
+        acc_oob = accuracy_score(y_oob, y_pred_oob)
+        acc_scores.append(0.368 * acc_train + 0.632 * acc_oob)
         
-        acc_0632 = 0.368 * acc_train + 0.632 * acc_oob
-        acc_scores.append(acc_0632)
+        # Andere Metriken (einfaches Mittel über OOB)
+        prec_scores.append(precision_score(y_oob, y_pred_oob, zero_division=0))
+        rec_scores.append(recall_score(y_oob, y_pred_oob, zero_division=0))
+        f1_scores.append(f1_score(y_oob, y_pred_oob, zero_division=0))
         
-        cm = confusion_matrix(y_oob, pipeline.predict(X_oob), labels=[0, 1])
-        tn, fp, fn, tp = cm.ravel()
+        # AUC und Balanced Accuracy
+        try:
+            y_probas_oob = pipeline.predict_proba(X_oob)[:, 1]
+            auc_scores.append(roc_auc_score(y_oob, y_probas_oob))
+        except:
+            auc_scores.append(0.5)
+            
+        b_acc_train = balanced_accuracy_score(y_train, y_pred_train)
+        b_acc_oob = balanced_accuracy_score(y_oob, y_pred_oob)
+        b_acc_scores.append(0.368 * b_acc_train + 0.632 * b_acc_oob)
+        
+        cm_oob = confusion_matrix(y_oob, y_pred_oob, labels=[0, 1])
+        tn, fp, fn, tp = cm_oob.ravel()
         all_tn.append(tn); all_fp.append(fp); all_fn.append(fn); all_tp.append(tp)
+        spec_scores.append(tn / (tn + fp) if (tn + fp) > 0 else 0)
         
         last_pipeline = pipeline
         last_X_oob = X_oob
@@ -201,14 +229,14 @@ def evaluate_bootstrap_0632(classifier_factory, df: pd.DataFrame, target_column:
         "fn": round(np.mean(all_fn), 1),
         "tp": round(np.mean(all_tp), 1),
         "accuracy": f"{np.mean(acc_scores):.3f} ± {np.std(acc_scores):.3f}",
-        "balanced_accuracy": "-", # .632 meist für Accuracy definiert
-        "precision": "-", 
-        "recall": "-",
-        "specificity": "-",
-        "f1": "-",
-        "false_positive_rate": "-",
+        "balanced_accuracy": round(np.mean(b_acc_scores), 3), 
+        "precision": round(np.mean(prec_scores), 3), 
+        "recall": round(np.mean(rec_scores), 3),
+        "specificity": round(np.mean(spec_scores), 3),
+        "f1": round(np.mean(f1_scores), 3),
+        "false_positive_rate": round(np.mean(all_fp) / (np.mean(all_fp) + np.mean(all_tn)), 3) if (np.mean(all_fp) + np.mean(all_tn)) > 0 else 0,
         "roc_values": (fpr_vals, tpr_vals),
-        "auc": "-",
+        "auc": round(np.mean(auc_scores), 3),
     }
 
 
