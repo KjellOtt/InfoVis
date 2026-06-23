@@ -59,7 +59,7 @@ app.layout = html.Div([
 )
 def display_page(pathname):
     raw_data = load_data()
-    cleaned = übersicht.bereinige_daten(raw_data)
+    cleaned, _ = übersicht.bereinige_daten(raw_data)
     target_column = chose_target_column(cleaned)
     
     if pathname == '/evaluierung':

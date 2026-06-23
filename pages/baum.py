@@ -3,47 +3,20 @@ import io
 import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
-import numpy as np
 import pandas as pd
 from dash import html
 from sklearn.linear_model import LogisticRegression
-from sklearn.model_selection import StratifiedKFold
 from sklearn.neighbors import KNeighborsClassifier
 from sklearn.tree import DecisionTreeClassifier, export_text, plot_tree
+from sklearn.compose import ColumnTransformer
+from sklearn.preprocessing import StandardScaler, OneHotEncoder
 
 
 CLASSIFIERS = {
     "Logistische Regression": lambda: LogisticRegression(solver="liblinear", max_iter=1000, random_state=42),
-    "Decision Tree": lambda: DecisionTreeClassifier(random_state=42),
+    "Decision Tree": lambda: DecisionTreeClassifier(max_depth=4, random_state=42),
     "K-Nearest Neighbor (k=3)": lambda: KNeighborsClassifier(n_neighbors=3),
 }
-
-
-def stratified_kfold_split(
-    df: pd.DataFrame,
-    target_column: str,
-    n_splits: int = 10,
-    random_state: int = 42,
-    fold_index: int = 0,
-) -> tuple[pd.DataFrame, pd.DataFrame]:
-    if target_column not in df.columns:
-        raise ValueError(f"Target-Spalte '{target_column}' ist nicht vorhanden.")
-
-    y = df[target_column].fillna("missing")
-    skf = StratifiedKFold(n_splits=n_splits, shuffle=True, random_state=random_state)
-    for idx, (train_idx, test_idx) in enumerate(skf.split(df, y)):
-        if idx == fold_index:
-            train_df = df.iloc[train_idx].reset_index(drop=True)
-            test_df = df.iloc[test_idx].reset_index(drop=True)
-            return train_df, test_df
-
-    raise ValueError(f"Fold-Index {fold_index} ist außerhalb des Bereichs.")
-
-
-def prepare_features(df: pd.DataFrame, target_column: str) -> tuple[pd.DataFrame, pd.Series]:
-    features = df.drop(columns=[target_column]).copy()
-    features = pd.get_dummies(features, drop_first=True)
-    return features.fillna(0), df[target_column].fillna("missing")
 
 
 def plot_tree_png(clf: DecisionTreeClassifier, feature_names: list[str], class_names: list[str]) -> str:
@@ -70,26 +43,36 @@ def plot_tree_png(clf: DecisionTreeClassifier, feature_names: list[str], class_n
 
 
 def render_tree(cleaned: pd.DataFrame, target_column: str):
-    train_df, test_df = stratified_kfold_split(cleaned, target_column)
-    X_train, y_train = prepare_features(train_df, target_column)
+    X = cleaned.drop(columns=[target_column])
+    y = cleaned[target_column].fillna("missing").astype(str)
     
-    X_train_clean = X_train.copy()
-    y_train = y_train.astype(str)
+    num_features = X.select_dtypes(include=[np.number]).columns.tolist()
+    cat_features = X.select_dtypes(exclude=[np.number]).columns.tolist()
+
+    preprocessor = ColumnTransformer(
+        transformers=[
+            ('num', StandardScaler(), num_features),
+            ('cat', OneHotEncoder(handle_unknown='ignore'), cat_features)
+        ])
+    
+    X_transformed = preprocessor.fit_transform(X)
+    
+    cat_feature_names = preprocessor.named_transformers_['cat'].get_feature_names_out(cat_features).tolist()
+    feature_names = num_features + cat_feature_names
 
     clf = DecisionTreeClassifier(max_depth=4, min_samples_leaf=5, random_state=42)
-    clf.fit(X_train_clean, y_train)
+    clf.fit(X_transformed, y)
 
-    feature_names = X_train_clean.columns.tolist()
-    class_names = sorted(y_train.unique())
+    class_names = [str(c) for c in sorted(y.unique())]
     tree_png = plot_tree_png(clf, feature_names, class_names)
     text_repr = export_text(clf, feature_names=feature_names)
 
     return html.Div([
         html.Div([
             html.P([
-                "Der Entscheidungsbaum wurde mit ",
-                html.Strong("Stratified 10-Fold CV"),
-                " (Fold 0) trainiert. Die Tiefe wurde auf 4 Ebenen begrenzt, um eine optimale Visualisierung und Interpretierbarkeit zu gewährleisten."
+                "Der Entscheidungsbaum visualisiert die gelernten Regeln des Modells. ",
+                "Die Daten wurden vorab skaliert und kodiert, um konsistent mit den anderen Klassifikatoren zu sein. ",
+                "Die Tiefe wurde auf 4 Ebenen begrenzt, um die Interpretierbarkeit zu gewährleisten."
             ])
         ], className="alert alert-info mb-4"),
         html.Div([
